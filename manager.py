@@ -372,7 +372,7 @@ def main():
 
     model_paths = []
     if args.model and args.model != "*":
-        model_paths.append(MODELS_DIR, args.model)
+        model_paths.append(os.path.join(MODELS_DIR, args.model))
     else:
         model_paths = [
             os.path.join(MODELS_DIR, f)
