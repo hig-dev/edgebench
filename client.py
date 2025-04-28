@@ -1,6 +1,6 @@
 import argparse
 import uuid
-import tflite_runtime.interpreter as tflite
+import ai_edge_litert.interpreter as tflite
 import numpy as np
 import time
 import paho.mqtt.client as mqtt

@@ -5,7 +5,7 @@ import json
 import queue
 import uuid
 import numpy as np
-import tflite_runtime.interpreter as tflite
+import ai_edge_litert.interpreter as tflite
 from io import BytesIO
 import paho.mqtt.client as mqtt
 from pck_eval import PckEvaluator
