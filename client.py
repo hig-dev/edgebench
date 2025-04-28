@@ -128,7 +128,7 @@ class EdgeBenchClient:
                         f.write(model_bytes)
                     l.log(f"Model saved to {model_path}")
                     self.model = tflite.Interpreter(
-                        model_path=model_path, num_threads=threads
+                        model_path=model_path, num_threads=self.threads
                     )
                     self.model.allocate_tensors()
                     l.log("Model loaded and tensors allocated")
