@@ -14,7 +14,7 @@ BYTE_ORDER = "big"
 
 
 class EdgeBenchClient:
-    def __init__(self, device_id, broker_host="127.0.0.1", broker_port=1883):
+    def __init__(self, device_id, broker_host="127.0.0.1", broker_port=1883, threads=1):
         self.device_id = device_id
         self.logger = Logger("EdgeBenchClient")
         self.topic = Topic(device_id)
@@ -126,7 +126,7 @@ class EdgeBenchClient:
                     with open(model_path, "wb") as f:
                         f.write(model_bytes)
                     l.log(f"Model saved to {model_path}")
-                    self.model = tflite.Interpreter(model_path=model_path)
+                    self.model = tflite.Interpreter(model_path=model_path, num_threads=1)
                     self.model.allocate_tensors()
                     l.log("Model loaded and tensors allocated")
             elif topic == t.INPUT_LATENCY():
@@ -190,12 +190,13 @@ class EdgeBenchClient:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", required=True, help="Device ID")
+    parser.add_argument("--threads", type=int, default=1, help="Number of threads")
     parser.add_argument("--broker-host", default="127.0.0.1", help="MQTT broker host")
     parser.add_argument(
         "--broker-port", type=int, default=1883, help="MQTT broker port"
     )
     args = parser.parse_args()
-    client = EdgeBenchClient(args.device, args.broker_host, args.broker_port)
+    client = EdgeBenchClient(args.device, args.broker_host, args.broker_port, args.threads)
     client.run()
 
 
