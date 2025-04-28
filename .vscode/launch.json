@@ -1,0 +1,65 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "manager: quick latency",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manager.py",
+            "console": "integratedTerminal",
+            "args": "--latency --device test --quick",
+        },
+        {
+            "name": "manager: quick accuracy",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manager.py",
+            "console": "integratedTerminal",
+            "args": "--accuracy --device test --quick",
+        },
+        {
+            "name": "manager: quick both",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manager.py",
+            "console": "integratedTerminal",
+            "args": "--latency --accuracy --device test --quick",
+        },
+        {
+            "name": "manager: full latency",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manager.py",
+            "console": "integratedTerminal",
+            "args": "--latency --device test",
+        },
+        {
+            "name": "manager: full accuracy",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manager.py",
+            "console": "integratedTerminal",
+            "args": "--accuracy --device test",
+        },
+        {
+            "name": "manager: full both",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manager.py",
+            "console": "integratedTerminal",
+            "args": "--latency --accuracy --device test",
+        },
+        {
+            "name": "Run client",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/client.py",
+            "console": "integratedTerminal",
+            "args": "--device test",
+        },
+    ]
+}
