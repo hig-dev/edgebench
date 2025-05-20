@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple, Callable
 from prettytable import PrettyTable
 
 
-device_name = "test"
+device_name = "rp5"
 
 REPORTS_DIR = osp.join(
     osp.dirname(osp.abspath(__file__)),
@@ -19,12 +19,12 @@ TORCH_MODEL_SUMMARY_JSON_FILE = osp.join(REPORTS_DIR, "model_summary.json")
 latency_report_json_paths = [
     osp.join(DEVICE_REPORTS_DIR, json_file)
     for json_file in os.listdir(DEVICE_REPORTS_DIR)
-    if json_file.endswith(".json") and "_latency" in json_file
+    if json_file.endswith(".json") and "_latency" in json_file and "-light" in json_file
 ]
 accuracy_report_json_paths = [
     osp.join(DEVICE_REPORTS_DIR, json_file)
     for json_file in os.listdir(DEVICE_REPORTS_DIR)
-    if json_file.endswith(".json") and "_accuracy" in json_file
+    if json_file.endswith(".json") and "_accuracy" in json_file and "-light" in json_file
 ]
 
 with open(TORCH_MODEL_SUMMARY_JSON_FILE, "r") as f:
@@ -67,6 +67,9 @@ def compare_metric(
     model_name_mapper: Optional[Callable[[Dict, Dict], str]] = None,
     group_by_conversion_method: bool = False,
 ):
+    if len(reports_a[1]) == 0 or len(reports_b[1]) == 0:
+        print(f"No reports found for {reports_a[0]} or {reports_b[0]}")
+        return
     table = PrettyTable()
     table.align = "l"
     table.field_names = ["Model", reports_a[0], reports_b[0], "Diff"]
@@ -263,7 +266,7 @@ compare_metric(
     format_accuracy,
     lambda x: x,
     ("tflite", {k: v for k, v in combined_reports.items() if "_int8" not in k}),
-    ("torch", dict([(k, v["torch"]) for k, v in combined_reports.items() if "_int8" not in k])),
+    ("torch", dict([(k, v["torch"]) for k, v in combined_reports.items()])),
     lambda report_a, report_b: report_a["model_name"],
     group_by_conversion_method=True,
 )
@@ -274,7 +277,7 @@ compare_metric(
     format_accuracy,
     lambda x: x,
     ("tflite", dict([(k, v) for k, v in combined_reports.items() if "_int8" in k])),
-    ("torch", dict([(k, v["torch"]) for k, v in combined_reports.items() if "_int8" in k])),
+    ("torch", dict([(k, v["torch"]) for k, v in combined_reports.items()])),
     lambda report_a, report_b: report_a["model_name"],
     group_by_conversion_method=True,
 )
