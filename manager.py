@@ -27,12 +27,14 @@ class EdgeBenchManager:
         device_id: str,
         is_micro: bool,
         model_paths: list[str],
+        skip: bool = False,
         broker_host="127.0.0.1",
         broker_port=1883,
     ):
         self.device_id = device_id
         self.is_micro = is_micro
         self.model_paths = model_paths
+        self.skip = skip
         self.client = mqtt.Client(
             client_id=str(uuid.uuid4()),
             clean_session=True,
@@ -184,6 +186,15 @@ class EdgeBenchManager:
             self.wait_for_started()
 
         for model_index, model_path in enumerate(self.model_paths):
+            latency_test_report_path = os.path.join(
+                REPORTS_DIR,
+                f"{device_id}/{os.path.basename(model_path)}_latency.json",
+            )
+            if self.skip and os.path.exists(latency_test_report_path):
+                l.log(
+                    f"Skipping {model_path} as report already exists at {latency_test_report_path}"
+                )
+                continue
             l.log(
                 f"Running for model {model_path} ({model_index + 1}/{len(self.model_paths)})"
             )
@@ -228,6 +239,14 @@ class EdgeBenchManager:
             elapsed_ms = (end_time - start_time) * 1000
             avg_latency_ms = elapsed_ms / iterations
             avg_latency_ms_from_client = float(elapsed_ms_from_client) / iterations
+            measured_energy_input_mWh = 0.0
+            if with_energy_measurement:
+                l.log("Please enter measured energy in mWh:")
+                while measured_energy_input_mWh <= 0:
+                    try:
+                        measured_energy_input_mWh = float(input())
+                    except ValueError:
+                        l.log("Invalid input. Please enter a positive number.")
 
             latency_test_report = {
                 "device_id": device_id,
@@ -235,12 +254,8 @@ class EdgeBenchManager:
                 "iterations": iterations,
                 "avg_latency_ms": avg_latency_ms,
                 "avg_latency_ms_from_client": avg_latency_ms_from_client,
+                "energy_mWh": measured_energy_input_mWh,
             }
-
-            latency_test_report_path = os.path.join(
-                REPORTS_DIR,
-                f"{device_id}/{os.path.basename(model_path)}_latency.json",
-            )
 
             os.makedirs(os.path.dirname(latency_test_report_path), exist_ok=True)
             with open(latency_test_report_path, "w") as f:
@@ -276,6 +291,16 @@ class EdgeBenchManager:
             self.wait_for_started()
 
         for model_index, model_path in enumerate(self.model_paths):
+            accuracy_test_report_path = os.path.join(
+                REPORTS_DIR,
+                f"{device_id}/{os.path.basename(model_path)}_accuracy.json",
+            )
+            if self.skip and os.path.exists(accuracy_test_report_path):
+                l.log(
+                    f"Skipping {model_path} as report already exists at {accuracy_test_report_path}"
+                )
+                continue
+
             l.log(
                 f"Running for model {model_path} ({model_index + 1}/{len(self.model_paths)})"
             )
@@ -316,11 +341,6 @@ class EdgeBenchManager:
             }
             accuracy_test_report.update(pck_metrics)
 
-            accuracy_test_report_path = os.path.join(
-                REPORTS_DIR,
-                f"{device_id}/{os.path.basename(model_path)}_accuracy.json",
-            )
-
             os.makedirs(os.path.dirname(accuracy_test_report_path), exist_ok=True)
             with open(accuracy_test_report_path, "w") as f:
                 json.dump(accuracy_test_report, f, indent=4)
@@ -348,6 +368,7 @@ def main():
     parser.add_argument("--device", required=True, help="Device ID")
     parser.add_argument("--micro", action="store_true", help="Micro client")
     parser.add_argument("--quick", action="store_true", help="Quick test")
+    parser.add_argument("--skip", action="store_true", help="Skips if report exists")
     parser.add_argument("--energy", action="store_true", help="With energy measurement")
     parser.add_argument(
         "-m",
@@ -355,6 +376,12 @@ def main():
         type=str,
         default="*",
         help="Model filename in models/ or '*' for all",
+    )
+    parser.add_argument(
+        "--exlude_quantized", action="store_true", help="Exclude quantized models"
+    )
+    parser.add_argument(
+        "--exlude_classic", action="store_true", help="Exclude models with classic head"
     )
     parser.add_argument(
         "-n",
@@ -380,8 +407,20 @@ def main():
             if f.endswith(".tflite")
         ]
 
+    if args.exlude_quantized:
+        model_paths = [
+            path for path in model_paths if "_int8" not in os.path.basename(path)
+        ]
+
+    if args.exlude_classic:
+        model_paths = [
+            path for path in model_paths if "-classic" not in os.path.basename(path)
+        ]
+
+    print(f"Found {len(model_paths)} models: {model_paths}")
+
     manager = EdgeBenchManager(
-        args.device, args.micro, model_paths, args.broker_host, args.broker_port
+        args.device, args.micro, model_paths, args.skip, args.broker_host, args.broker_port
     )
 
     if args.latency:
