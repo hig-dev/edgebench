@@ -58,3 +58,4 @@ python_files/tests/*/.data/.coverage*
 python_files/tests/*/.data/*/.coverage*
 src/testTestingRootWkspc/coverageWorkspace/.coverage
 micro_client/esp32/main/wifi_config.h
+managed_components/

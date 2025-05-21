@@ -22,6 +22,11 @@
 #include "lwip/sys.h"
 #include "sdkconfig.h"
 
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/system_setup.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+
 #define ESP_MAXIMUM_RETRY  10
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
 
@@ -80,7 +85,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
-    esp_mqtt_event_handle_t event = event_data;
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     esp_mqtt_client_handle_t client = event->client;
     int msg_id;
     switch ((esp_mqtt_event_id_t)event_id) {
@@ -135,14 +140,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 static void mqtt_app_start(void)
 {
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.hostname = MQTT_BROKER_HOST,
-        .broker.address.port = MQTT_BROKER_PORT,
-        .broker.address.transport = MQTT_TRANSPORT_OVER_TCP,
-    };
+    esp_mqtt_client_config_t mqtt_cfg{};
+    mqtt_cfg.broker.address.hostname  = MQTT_BROKER_HOST;
+    mqtt_cfg.broker.address.port      = MQTT_BROKER_PORT;
+    mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_TCP;
+
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
 }
 
@@ -176,7 +181,9 @@ void wifi_init_sta(void)
         .sta = {
             .ssid = WIFI_SSID,
             .password = WIFI_PASS,
-            .threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
+            .threshold = {
+                .authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
+            },
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
@@ -208,7 +215,7 @@ void wifi_init_sta(void)
 }
 
 
-void app_main(void* param)
+extern "C" void app_main(void* param)
 {
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
