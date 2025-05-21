@@ -1,0 +1,7 @@
+#ifndef MQTT_CONFIG_H
+#define MQTT_CONFIG_H
+
+#define MQTT_BROKER_HOST   "192.168.178.95"
+#define MQTT_BROKER_PORT   1883
+
+#endif
