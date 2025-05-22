@@ -6,7 +6,6 @@ import time
 import paho.mqtt.client as mqtt
 import queue
 import tempfile
-from io import BytesIO
 
 from shared import TestMode, ClientStatus, Command, Topic, Logger
 
@@ -134,21 +133,26 @@ class EdgeBenchClient:
                     l.log("Model loaded and tensors allocated")
             elif topic == t.INPUT_LATENCY():
                 input_bytes = payload
+                input_details = self.model.get_input_details()
                 l.log(f"Received input, size: {len(input_bytes)} bytes")
-                self.input = np.load(BytesIO(input_bytes))
+                self.input = np.frombuffer(
+                    input_bytes, dtype=input_details[0]["dtype"]
+                ).reshape(input_details[0]["shape"])
             elif topic == t.INPUT_ACCURACY():
                 input_bytes = payload
                 l.log(f"Received input, size: {len(input_bytes)} bytes")
-                input = np.load(BytesIO(input_bytes))
                 input_details = self.model.get_input_details()
                 output_details = self.model.get_output_details()
+                input = np.frombuffer(
+                    input_bytes, dtype=input_details[0]["dtype"]
+                ).reshape(input_details[0]["shape"])
+                
                 self.model.set_tensor(input_details[0]["index"], input)
                 self.model.invoke()
                 output_data = self.model.get_tensor(output_details[0]["index"])
-                output_bytes_io = BytesIO()
-                np.save(output_bytes_io, output_data)
+                output_bytes = output_data.flatten().tobytes()
                 self.client.publish(
-                    self.topic.RESULT_ACCURACY(), output_bytes_io.getvalue(), qos=1
+                    self.topic.RESULT_ACCURACY(), output_bytes, qos=1
                 )
             elif topic == t.CMD():
                 cmd = Command.from_bytes(payload, byteorder=BYTE_ORDER)

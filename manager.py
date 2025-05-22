@@ -109,6 +109,7 @@ class EdgeBenchManager:
         self.logger.log(f"Sending model from {model_path}")
         with open(model_path, "rb") as f:
             model_bytes = f.read()
+        self.logger.log(f"Model size: {len(model_bytes)} bytes")
         self.client.publish(self.topic.MODEL(), model_bytes, qos=1)
 
     def send_input(self, model_path: str, input_data: np.ndarray, topic: str):
@@ -125,12 +126,11 @@ class EdgeBenchManager:
             input_scale, input_zero_point = input_details["quantization"]
             input_data = (input_data / input_scale) + input_zero_point
             input_data = np.around(input_data).astype(np.int8)
-        input_data_npy_bytes_io = BytesIO()
-        np.save(input_data_npy_bytes_io, input_data)
+        input_data_bytes = input_data.flatten().tobytes()
         self.logger.log(
-            f"Sending input (shape: {input_data.shape}, dtype: {input_data.dtype})"
+            f"Sending input (shape: {input_data.shape}, dtype: {input_data.dtype}, bytes: {len(input_data_bytes)})"
         )
-        self.client.publish(topic, input_data_npy_bytes_io.getvalue(), qos=1)
+        self.client.publish(topic, input_data_bytes, qos=1)
 
     def send_command(self, command: Command):
         self.logger.log(f"Sending command {command}")
@@ -200,17 +200,15 @@ class EdgeBenchManager:
             )
             self.set_mode(TestMode.LATENCY)
             self.set_iterations(iterations)
-
-            if not self.is_micro:
-                self.send_model(model_path)
-
-                input_data = np.load(SAMPLE_INPUT_NCHW_PATH)
-                self.send_input(model_path, input_data, t.INPUT_LATENCY())
-
+            self.send_model(model_path)
+            input_data = np.load(SAMPLE_INPUT_NCHW_PATH)
+            self.send_input(model_path, input_data, t.INPUT_LATENCY())
             self.wait_for_ready()
+            
             if with_energy_measurement:
                 l.log("Ready for energy measurement?")
                 input("Press Enter to continue...")
+            
             self.send_command(Command.START_LATENCY_TEST)
             l.log("Waiting for clients to finish...")
 
@@ -327,8 +325,10 @@ class EdgeBenchManager:
                 while result is None:
                     message = self.wait_for_message()
                     if message and message.topic == t.RESULT_ACCURACY():
-                        npy_bytes = message.payload
-                        result = np.load(BytesIO(npy_bytes))
+                        result = np.frombuffer(
+                            message.payload,
+                            dtype=self.model_output_details[model_path]["dtype"],
+                        ).reshape(self.model_output_details[model_path]["shape"])
                         l.log(
                             f"Received result for input {index + 1}/{test_data_length}"
                         )
@@ -420,19 +420,24 @@ def main():
     print(f"Found {len(model_paths)} models: {model_paths}")
 
     manager = EdgeBenchManager(
-        args.device, args.micro, model_paths, args.skip, args.broker_host, args.broker_port
+        args.device,
+        args.micro,
+        model_paths,
+        args.skip,
+        args.broker_host,
+        args.broker_port,
     )
 
     if args.latency:
         manager.run_latency(
-            iterations=10 if args.quick else args.iterations,
+            iterations=2 if args.quick else args.iterations,
             disconnect_after=not args.accuracy,
             with_energy_measurement=args.energy,
         )
 
     if args.accuracy:
         manager.run_accuracy(
-            limit=10 if args.quick else 0, already_connected=args.latency
+            limit=2 if args.quick else 0, already_connected=args.latency
         )
 
 
