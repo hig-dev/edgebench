@@ -218,63 +218,14 @@ void EdgeBenchClient::handleMessage(const std::string& topic, const std::vector<
         ESP_LOGI(TAG, "Free PSRAM size: %d", free_size_psram);
 
         delete interpreter_;
-#if DEIT
-        auto *micro_op_resolver = new tflite::MicroMutableOpResolver<19>();
-        micro_op_resolver->AddAdd();
-        micro_op_resolver->AddBatchMatMul();
-        micro_op_resolver->AddConcatenation();
-        micro_op_resolver->AddConv2D();
-        micro_op_resolver->AddDepthwiseConv2D();
-        micro_op_resolver->AddFullyConnected();
-        micro_op_resolver->AddGather();
-        // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
-        //micro_op_resolver->AddGelu();
-        micro_op_resolver->AddMean();
-        micro_op_resolver->AddMul();
-        micro_op_resolver->AddPad();
-        micro_op_resolver->AddReshape();
-        micro_op_resolver->AddResizeNearestNeighbor();
-        micro_op_resolver->AddRsqrt();
-        micro_op_resolver->AddSoftmax();
-        micro_op_resolver->AddSquaredDifference();
-        micro_op_resolver->AddStridedSlice();
-        micro_op_resolver->AddSub();
-        micro_op_resolver->AddTranspose();
-        micro_op_resolver_ = micro_op_resolver;
-#elif EFFICIENTVIT
-        auto *micro_op_resolver = new tflite::MicroMutableOpResolver<17>();
-        micro_op_resolver->AddAdd();
-        micro_op_resolver->AddBatchMatMul();
-        micro_op_resolver->AddConcatenation();
-        micro_op_resolver->AddConv2D();
-        micro_op_resolver->AddDepthwiseConv2D();
-        micro_op_resolver->AddDequantize();
-        micro_op_resolver->AddDiv();
-        micro_op_resolver->AddHardSwish();
-        micro_op_resolver->AddMul();
-        micro_op_resolver->AddPad();
-        micro_op_resolver->AddPadV2();
-        micro_op_resolver->AddQuantize();
-        micro_op_resolver->AddRelu();
-        micro_op_resolver->AddReshape();
-        micro_op_resolver->AddResizeNearestNeighbor();
-        micro_op_resolver->AddStridedSlice();
-        micro_op_resolver->AddTranspose();
-        micro_op_resolver_ = micro_op_resolver;
-#else // MOBILEONE
-        auto *micro_op_resolver = new tflite::MicroMutableOpResolver<8>();
-        micro_op_resolver->AddAdd();
-        micro_op_resolver->AddConv2D();
-        micro_op_resolver->AddDepthwiseConv2D();
-        micro_op_resolver->AddMul();
-        micro_op_resolver->AddPad();
-        micro_op_resolver->AddResizeNearestNeighbor();
-        micro_op_resolver->AddLogistic();
-        micro_op_resolver->AddMean();
-        micro_op_resolver_ = micro_op_resolver;
-#endif
+
         if (tensor_arena_ == nullptr) {
             ESP_LOGE(TAG, "Tensor arena not allocated");
+            quit_ = true;
+            return;
+        }
+        if (micro_op_resolver_ == nullptr) {
+            ESP_LOGE(TAG, "Micro op resolver not allocated");
             quit_ = true;
             return;
         }
@@ -343,8 +294,6 @@ void EdgeBenchClient::handleMessage(const std::string& topic, const std::vector<
             mode_       = TestMode::NONE;
             delete interpreter_;
             interpreter_ = nullptr;
-            delete micro_op_resolver_;
-            micro_op_resolver_ = nullptr;
             ESP_LOGI(TAG, "State reset");
             return;
         }

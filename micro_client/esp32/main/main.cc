@@ -129,8 +129,13 @@ void wifi_init_sta(void)
 extern "C" void app_main(void* param)
 {
     // Initialize Tensor Arena before everything else
-    reserve_tensor_arena();
-    reserve_model_buffer();
+    if (!reserve_tensor_arena()) {
+        return;
+    }
+    if (!reserve_model_buffer()) {
+        return;
+    }
+    create_op_resolver();
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

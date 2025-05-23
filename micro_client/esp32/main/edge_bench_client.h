@@ -6,7 +6,6 @@
 #include "mqtt_topic.h"
 #include "mqtt_client.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 
 struct MqttMessage {
     std::string     topic;
@@ -45,7 +44,6 @@ private:
     int                                  model_size_{0};
     size_t                               model_input_size_{0};
     bool                                 latency_input_ready_{false};
-    tflite::MicroOpResolver*             micro_op_resolver_;
     tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
     int8_t*                              output_tensor_{nullptr};

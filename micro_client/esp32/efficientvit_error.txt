@@ -1,0 +1,18 @@
+I (6901) EdgeBenchClient: Running 2 iterations...
+
+abort() was called at PC 0x42027b37 on core 1
+--- 0x42027b37: tflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*) at /home/hig/src/edgebench/micro_client/esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc:291 (discriminator 1)
+
+
+
+Backtrace: 0x40375dbd:0x3fcbffb0 0x4037d495:0x3fcbffd0 0x403855f1:0x3fcbfff0 0x42027b37:0x3fcc0060 0x4202e146:0x3fcc05b0 0x42011a3a:0x3fcc05e0 0x4200d2ec:0x3fcc0600 0x4200d345:0x3fcc0640 0x4037df2d:0x3fcc0660
+--- 0x40375dbd: panic_abort at /home/hig/esp/v5.4.1/esp-idf/components/esp_system/panic.c:454
+--- 0x4037d495: esp_system_abort at /home/hig/esp/v5.4.1/esp-idf/components/esp_system/port/esp_system_chip.c:87
+--- 0x403855f1: abort at /home/hig/esp/v5.4.1/esp-idf/components/newlib/abort.c:38
+--- 0x42027b37: tflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*) at /home/hig/src/edgebench/micro_client/esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc:291 (discriminator 1)
+--- 0x4202e146: tflite::MicroInterpreterGraph::InvokeSubgraph(int) at /home/hig/src/edgebench/micro_client/esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc:228
+--- 0x42011a3a: tflite::MicroInterpreter::Invoke() at /home/hig/src/edgebench/micro_client/esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc:294
+--- 0x4200d2ec: EdgeBenchClient::startLatencyTest() at /home/hig/src/edgebench/micro_client/esp32/main/edge_bench_client.cc:68
+--- 0x4200d345: EdgeBenchClient::handleMessage(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::vector<unsigned char, std::allocator<unsigned char> > const&)::{lambda(void*)#2}::_FUN(void*) at /home/hig/src/edgebench/micro_client/esp32/main/edge_bench_client.cc:276
+---  (inlined by) _FUN at /home/hig/src/edgebench/micro_client/esp32/main/edge_bench_client.cc:278
+--- 0x4037df2d: vPortTaskWrapper at /home/hig/esp/v5.4.1/esp-idf/components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:139
