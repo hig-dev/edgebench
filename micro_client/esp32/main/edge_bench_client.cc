@@ -15,7 +15,6 @@ EdgeBenchClient::EdgeBenchClient(const std::string& device_id,
     broker_port_(broker_port),
     topic_(device_id)
 {
-    msg_queue_ = xQueueCreate(5, sizeof(MqttMessage*));
     esp_mqtt_client_config_t cfg{};
     cfg.broker.address.hostname  = broker_host_.c_str();
     cfg.broker.address.port      = broker_port_;
@@ -125,12 +124,14 @@ void EdgeBenchClient::onMessage(esp_mqtt_event_handle_t ev) {
         if (topic == topic_.INPUT_LATENCY() || topic == topic_.INPUT_ACCURACY()) {
             if (input_tensor_ == nullptr) {
                 ESP_LOGE(TAG, "Input tensor not allocated");
+                quit_ = true;
                 return;
             }
             if (ev->total_data_len != model_input_size_) {
                 ESP_LOGE(TAG, "Invalid input data size, expected %zu, got %zu",
                         model_input_size_,
                         ev->total_data_len);
+                quit_ = true;
                 return;
             }
             std::memcpy(input_tensor_, ev->data, model_input_size_);
@@ -138,14 +139,7 @@ void EdgeBenchClient::onMessage(esp_mqtt_event_handle_t ev) {
         else {
             data = std::vector<uint8_t>(ev->data, ev->data + ev->data_len);
         }
-        auto *msg = new MqttMessage{
-            std::move(topic),
-            std::move(data)
-        };
-        if (xQueueSend(msg_queue_, &msg, 0) != pdPASS) {
-            delete msg;
-            ESP_LOGE(TAG, "Failed to send message to queue");
-        }
+        handleMessage(topic, data);
         return;
     }
     if (ev->current_data_offset == 0) {
@@ -156,16 +150,19 @@ void EdgeBenchClient::onMessage(esp_mqtt_event_handle_t ev) {
         auto topic = std::string(ev->topic, ev->topic_len);
         if (topic != topic_.MODEL()) {
             ESP_LOGE(TAG, "Invalid topic for partial message");
+            quit_ = true;
             return;
         }
         if (kModelBufferSize < ev->total_data_len) {
             ESP_LOGE(TAG, "Model size too large: %zu bytes", ev->total_data_len);
+            quit_ = true;
             return;
         }
         model_size_ = ev->total_data_len;
     }
     if (model_buffer_ == nullptr) {
         ESP_LOGE(TAG, "Model buffer not allocated");
+        quit_ = true;
         return;
     }
     memcpy(model_buffer_ + ev->current_data_offset,
@@ -173,14 +170,213 @@ void EdgeBenchClient::onMessage(esp_mqtt_event_handle_t ev) {
            ev->data_len);
     if (ev->current_data_offset + ev->data_len >= ev->total_data_len) {
         ESP_LOGI(TAG, "Model load completed (%zu bytes)", ev->total_data_len);
-        auto *msg = new MqttMessage{
-            topic_.MODEL(),
-            std::vector<uint8_t>(0)
-        };
-        if (xQueueSend(msg_queue_, &msg, 0) != pdPASS) {
-            delete msg;
-            ESP_LOGE(TAG, "Failed to send message to queue");
+        handleMessage(topic_.MODEL(), std::vector<uint8_t>(0));
+    }
+}
+
+void EdgeBenchClient::handleMessage(const std::string& topic, const std::vector<uint8_t>& payload) {
+    ESP_LOGI(TAG, "Got message on '%s' (%zu bytes)",
+                     topic.c_str(),
+                     payload.size());
+    if (topic == topic_.CONFIG_MODE()) {
+        if (payload.size() != 1) {
+            ESP_LOGE(TAG, "Invalid mode message");
+            quit_ = true;
+            return;
         }
+        mode_ = static_cast<TestMode>(payload[0]);
+        ESP_LOGI(TAG, "Mode set: %d", int(mode_));
+    }
+    else if (topic == topic_.CONFIG_ITERATIONS()) {
+        if (payload.size() != 4) {
+            ESP_LOGE(TAG, "Invalid iterations message");
+            quit_ = true;
+            return;
+        }
+        // Assume big-endian 4-byte integer
+        iterations_ =
+            (static_cast<int>(payload[0]) << 24) |
+            (static_cast<int>(payload[1]) << 16) |
+            (static_cast<int>(payload[2]) <<  8) |
+            static_cast<int>(payload[3]);
+        ESP_LOGI(TAG, "Iterations set: %d", iterations_);
+    }
+    else if (topic == topic_.MODEL()) {
+        if (model_buffer_ == nullptr) {
+            ESP_LOGE(TAG, "Model buffer is empty");
+            quit_ = true;
+            return;
+        }
+        const tflite::Model* model = tflite::GetModel(model_buffer_);
+        if (model->version() != TFLITE_SCHEMA_VERSION) {
+            ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
+            quit_ = true;
+            return;
+        }
+
+        auto free_size_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        ESP_LOGI(TAG, "Free PSRAM size: %d", free_size_psram);
+
+        delete interpreter_;
+#if DEIT
+        auto *micro_op_resolver = new tflite::MicroMutableOpResolver<19>();
+        micro_op_resolver->AddAdd();
+        micro_op_resolver->AddBatchMatMul();
+        micro_op_resolver->AddConcatenation();
+        micro_op_resolver->AddConv2D();
+        micro_op_resolver->AddDepthwiseConv2D();
+        micro_op_resolver->AddFullyConnected();
+        micro_op_resolver->AddGather();
+        // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
+        //micro_op_resolver->AddGelu();
+        micro_op_resolver->AddMean();
+        micro_op_resolver->AddMul();
+        micro_op_resolver->AddPad();
+        micro_op_resolver->AddReshape();
+        micro_op_resolver->AddResizeNearestNeighbor();
+        micro_op_resolver->AddRsqrt();
+        micro_op_resolver->AddSoftmax();
+        micro_op_resolver->AddSquaredDifference();
+        micro_op_resolver->AddStridedSlice();
+        micro_op_resolver->AddSub();
+        micro_op_resolver->AddTranspose();
+        micro_op_resolver_ = micro_op_resolver;
+#elif EFFICIENTVIT
+        auto *micro_op_resolver = new tflite::MicroMutableOpResolver<17>();
+        micro_op_resolver->AddAdd();
+        micro_op_resolver->AddBatchMatMul();
+        micro_op_resolver->AddConcatenation();
+        micro_op_resolver->AddConv2D();
+        micro_op_resolver->AddDepthwiseConv2D();
+        micro_op_resolver->AddDequantize();
+        micro_op_resolver->AddDiv();
+        micro_op_resolver->AddHardSwish();
+        micro_op_resolver->AddMul();
+        micro_op_resolver->AddPad();
+        micro_op_resolver->AddPadV2();
+        micro_op_resolver->AddQuantize();
+        micro_op_resolver->AddRelu();
+        micro_op_resolver->AddReshape();
+        micro_op_resolver->AddResizeNearestNeighbor();
+        micro_op_resolver->AddStridedSlice();
+        micro_op_resolver->AddTranspose();
+        micro_op_resolver_ = micro_op_resolver;
+#else // MOBILEONE
+        auto *micro_op_resolver = new tflite::MicroMutableOpResolver<8>();
+        micro_op_resolver->AddAdd();
+        micro_op_resolver->AddConv2D();
+        micro_op_resolver->AddDepthwiseConv2D();
+        micro_op_resolver->AddMul();
+        micro_op_resolver->AddPad();
+        micro_op_resolver->AddResizeNearestNeighbor();
+        micro_op_resolver->AddLogistic();
+        micro_op_resolver->AddMean();
+        micro_op_resolver_ = micro_op_resolver;
+#endif
+        if (tensor_arena_ == nullptr) {
+            ESP_LOGE(TAG, "Tensor arena not allocated");
+            quit_ = true;
+            return;
+        }
+        interpreter_ = new tflite::MicroInterpreter(model,
+                                                    *micro_op_resolver_,
+                                                    tensor_arena_,
+                                                    kArenaSize);
+        TfLiteStatus allocate_status = interpreter_->AllocateTensors();
+        if (allocate_status != kTfLiteOk) {
+            ESP_LOGE(TAG, "AllocateTensors() failed");
+            quit_ = true;
+            return;
+        }
+        input_tensor_  = interpreter_->typed_input_tensor<int8_t>(0);
+        output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
+        ESP_LOGI(TAG, "Model loaded; tensors allocated");ESP_LOGI(TAG, "Copy input data to tensor");
+        model_input_size_ = interpreter_->input_tensor(0)->bytes;
+    }
+    else if (topic == topic_.INPUT_LATENCY()) {
+        ESP_LOGI(TAG, "Input latency data loaded");
+        latency_input_ready_ = true;
+    }
+    else if (topic == topic_.INPUT_ACCURACY()) {
+        xTaskCreatePinnedToCore(
+            [](void* arg) {
+                auto self = static_cast<EdgeBenchClient*>(arg);
+                self->startAccuracyTest();
+                vTaskDelete(nullptr);
+            },
+            "AccuracyTest",
+            4 * 1024,
+            this,
+            1,
+            nullptr,
+            1);
+    }
+    else if (topic == topic_.CMD()) {
+        if (payload.size() != 1) {
+            ESP_LOGE(TAG, "Invalid command message");
+            quit_ = true;
+            return;
+        }
+        Command cmd = static_cast<Command>(payload[0]);
+        if (cmd == Command::START_LATENCY_TEST) {
+            xTaskCreatePinnedToCore(
+                [](void* arg) {
+                    auto self = static_cast<EdgeBenchClient*>(arg);
+                    self->startLatencyTest();
+                    vTaskDelete(nullptr);
+                },
+                "LatencyTest",
+                4 * 1024,
+                this,
+                1,
+                nullptr,
+                1);
+        } else if (cmd == Command::STOP) {
+            quit_ = true;
+            return;
+        } else if (cmd == Command::RESET) {
+            sent_ready_for_model_ = false;
+            sent_ready_for_input_ = false;
+            sent_ready_for_task_  = false;
+            iterations_ = 0;
+            latency_input_ready_ = false;
+            mode_       = TestMode::NONE;
+            delete interpreter_;
+            interpreter_ = nullptr;
+            delete micro_op_resolver_;
+            micro_op_resolver_ = nullptr;
+            ESP_LOGI(TAG, "State reset");
+            return;
+        }
+    }
+
+    bool latency_config_ready = 
+        mode_ == TestMode::LATENCY
+        && iterations_ > 0;
+    
+    bool accuracy_config_ready = 
+        mode_ == TestMode::ACCURACY;
+
+    bool config_ready = latency_config_ready || accuracy_config_ready;
+    bool interpreter_ready = interpreter_ != nullptr;
+    bool input_ready = latency_input_ready_ || mode_ == TestMode::ACCURACY;
+
+    if (!sent_ready_for_model_ && config_ready) {
+        sent_ready_for_model_ = true;
+        ESP_LOGI(TAG, "All config received, requesting model");
+        sendStatus(ClientStatus::READY_FOR_MODEL);
+    }
+
+    if (!sent_ready_for_input_ && config_ready && interpreter_ready && mode_ == TestMode::LATENCY) {
+        sent_ready_for_input_ = true;
+        ESP_LOGI(TAG, "Interpreter ready, waiting for input");
+        sendStatus(ClientStatus::READY_FOR_INPUT);
+    }
+    
+    if (!sent_ready_for_task_ && config_ready && interpreter_ready && input_ready) {
+        sent_ready_for_task_ = true;
+        ESP_LOGI(TAG, "Ready for task, waiting for input or command");
+        sendStatus(ClientStatus::READY_FOR_TASK);
     }
 }
 
@@ -190,207 +386,8 @@ void EdgeBenchClient::run() {
     // Wait for the subscriptions to be established
     vTaskDelay(2000 / portTICK_PERIOD_MS);
     sendStatus(ClientStatus::STARTED);
-
-    bool sent_ready_for_model = false;
-    bool sent_ready_for_input = false;
-    bool sent_ready_for_task  = false;
-    MqttMessage *msg;
-    ESP_LOGI(TAG, "Waiting for message...");
-    while (xQueueReceive(msg_queue_, &msg, portMAX_DELAY) == pdPASS) {
-        ESP_LOGI(TAG, "Got message on '%s' (%zu bytes)",
-                     msg->topic.c_str(),
-                     msg->payload.size());
-        auto t = msg->topic;
-        if (t == topic_.CONFIG_MODE()) {
-            if (msg->payload.size() != 1) {
-                ESP_LOGE(TAG, "Invalid mode message");
-                break;
-            }
-            mode_ = static_cast<TestMode>(msg->payload[0]);
-            ESP_LOGI(TAG, "Mode set: %d", int(mode_));
-        }
-        else if (t == topic_.CONFIG_ITERATIONS()) {
-            if (msg->payload.size() != 4) {
-                ESP_LOGE(TAG, "Invalid iterations message");
-                break;
-            }
-            // Assume big-endian 4-byte integer
-            iterations_ =
-                (static_cast<int>(msg->payload[0]) << 24) |
-                (static_cast<int>(msg->payload[1]) << 16) |
-                (static_cast<int>(msg->payload[2]) <<  8) |
-                static_cast<int>(msg->payload[3]);
-            ESP_LOGI(TAG, "Iterations set: %d", iterations_);
-        }
-        else if (t == topic_.MODEL()) {
-            if (model_buffer_ == nullptr) {
-                ESP_LOGE(TAG, "Model buffer is empty");
-                break;
-            }
-            const tflite::Model* model = tflite::GetModel(model_buffer_);
-            if (model->version() != TFLITE_SCHEMA_VERSION) {
-                ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
-                break;
-            }
-
-            auto free_size_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            ESP_LOGI(TAG, "Free PSRAM size: %d", free_size_psram);
-
-            delete interpreter_;
-#if DEIT
-            auto micro_op_resolver = tflite::MicroMutableOpResolver<19>();
-            micro_op_resolver.AddAdd();
-            micro_op_resolver.AddBatchMatMul();
-            micro_op_resolver.AddConcatenation();
-            micro_op_resolver.AddConv2D();
-            micro_op_resolver.AddDepthwiseConv2D();
-            micro_op_resolver.AddFullyConnected();
-            micro_op_resolver.AddGather();
-            // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
-            //micro_op_resolver.AddGelu();
-            micro_op_resolver.AddMean();
-            micro_op_resolver.AddMul();
-            micro_op_resolver.AddPad();
-            micro_op_resolver.AddReshape();
-            micro_op_resolver.AddResizeNearestNeighbor();
-            micro_op_resolver.AddRsqrt();
-            micro_op_resolver.AddSoftmax();
-            micro_op_resolver.AddSquaredDifference();
-            micro_op_resolver.AddStridedSlice();
-            micro_op_resolver.AddSub();
-            micro_op_resolver.AddTranspose();
-#elif EFFICIENTVIT
-            auto micro_op_resolver = tflite::MicroMutableOpResolver<17>();
-            micro_op_resolver.AddAdd();
-            micro_op_resolver.AddBatchMatMul();
-            micro_op_resolver.AddConcatenation();
-            micro_op_resolver.AddConv2D();
-            micro_op_resolver.AddDepthwiseConv2D();
-            micro_op_resolver.AddDequantize();
-            micro_op_resolver.AddDiv();
-            micro_op_resolver.AddHardSwish();
-            micro_op_resolver.AddMul();
-            micro_op_resolver.AddPad();
-            micro_op_resolver.AddPadV2();
-            micro_op_resolver.AddQuantize();
-            micro_op_resolver.AddRelu();
-            micro_op_resolver.AddReshape();
-            micro_op_resolver.AddResizeNearestNeighbor();
-            micro_op_resolver.AddStridedSlice();
-            micro_op_resolver.AddTranspose();
-#else // MOBILEONE
-            auto micro_op_resolver = tflite::MicroMutableOpResolver<8>();
-            micro_op_resolver.AddAdd();
-            micro_op_resolver.AddConv2D();
-            micro_op_resolver.AddDepthwiseConv2D();
-            micro_op_resolver.AddMul();
-            micro_op_resolver.AddPad();
-            micro_op_resolver.AddResizeNearestNeighbor();
-            micro_op_resolver.AddLogistic();
-            micro_op_resolver.AddMean();
-#endif
-            if (tensor_arena_ == nullptr) {
-                ESP_LOGE(TAG, "Tensor arena not allocated");
-                break;
-            }
-            interpreter_ = new tflite::MicroInterpreter(model,
-                                                        micro_op_resolver,
-                                                        tensor_arena_,
-                                                        kArenaSize);
-            TfLiteStatus allocate_status = interpreter_->AllocateTensors();
-            if (allocate_status != kTfLiteOk) {
-                ESP_LOGE(TAG, "AllocateTensors() failed");
-                break;
-            }
-            input_tensor_  = interpreter_->typed_input_tensor<int8_t>(0);
-            output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
-            ESP_LOGI(TAG, "Model loaded; tensors allocated");ESP_LOGI(TAG, "Copy input data to tensor");
-            model_input_size_ = interpreter_->input_tensor(0)->bytes;
-        }
-        else if (t == topic_.INPUT_LATENCY()) {
-            ESP_LOGI(TAG, "Input latency data loaded");
-            latency_input_ready_ = true;
-        }
-        else if (t == topic_.INPUT_ACCURACY()) {
-            xTaskCreatePinnedToCore(
-                [](void* arg) {
-                    auto self = static_cast<EdgeBenchClient*>(arg);
-                    self->startAccuracyTest();
-                    vTaskDelete(nullptr);
-                },
-                "AccuracyTest",
-                4 * 1024,
-                this,
-                1,
-                nullptr,
-                1);
-        }
-        else if (t == topic_.CMD()) {
-            if (msg->payload.size() != 1) {
-                ESP_LOGE(TAG, "Invalid command message");
-                break;
-            }
-            Command cmd = static_cast<Command>(msg->payload[0]);
-            if (cmd == Command::START_LATENCY_TEST) {
-                xTaskCreatePinnedToCore(
-                    [](void* arg) {
-                        auto self = static_cast<EdgeBenchClient*>(arg);
-                        self->startLatencyTest();
-                        vTaskDelete(nullptr);
-                    },
-                    "LatencyTest",
-                    4 * 1024,
-                    this,
-                    1,
-                    nullptr,
-                    1);
-            } else if (cmd == Command::STOP) {
-                disconnect();
-                break;
-            } else if (cmd == Command::RESET) {
-                sent_ready_for_model = false;
-                sent_ready_for_input = false;
-                sent_ready_for_task  = false;
-                iterations_ = 0;
-                latency_input_ready_ = false;
-                mode_       = TestMode::NONE;
-                delete interpreter_;
-                interpreter_ = nullptr;
-                delete msg;
-                ESP_LOGI(TAG, "State reset");
-                continue;
-            }
-        }
-
-        bool latency_config_ready = 
-            mode_ == TestMode::LATENCY
-            && iterations_ > 0;
-        
-        bool accuracy_config_ready = 
-            mode_ == TestMode::ACCURACY;
-
-        bool config_ready = latency_config_ready || accuracy_config_ready;
-        bool interpreter_ready = interpreter_ != nullptr;
-        bool input_ready = latency_input_ready_ || mode_ == TestMode::ACCURACY;
-
-        if (!sent_ready_for_model && config_ready) {
-            sent_ready_for_model = true;
-            ESP_LOGI(TAG, "All config received, requesting model");
-            sendStatus(ClientStatus::READY_FOR_MODEL);
-        }
-
-        if (!sent_ready_for_input && config_ready && interpreter_ready && mode_ == TestMode::LATENCY) {
-            sent_ready_for_input = true;
-            ESP_LOGI(TAG, "Interpreter ready, waiting for input");
-            sendStatus(ClientStatus::READY_FOR_INPUT);
-        }
-        
-        if (!sent_ready_for_task && config_ready && interpreter_ready && input_ready) {
-            sent_ready_for_task = true;
-            ESP_LOGI(TAG, "Ready for task, waiting for input or command");
-            sendStatus(ClientStatus::READY_FOR_TASK);
-        }
-        delete msg;
+    while (!quit_) {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
-    delete msg;
+    disconnect();
 }

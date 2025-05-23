@@ -5,7 +5,6 @@
 #include <vector>
 #include "mqtt_topic.h"
 #include "mqtt_client.h"
-#include "freertos/queue.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 
@@ -32,6 +31,7 @@ private:
                                    void* event_data);
     void onConnect();
     void onMessage(esp_mqtt_event_handle_t ev);
+    void handleMessage(const std::string &topic, const std::vector<uint8_t> &payload);
     void startLatencyTest();
     void startAccuracyTest();
 
@@ -40,15 +40,19 @@ private:
     int                                  broker_port_;
     Topic                                topic_;
     esp_mqtt_client_handle_t             client_;
-    QueueHandle_t                        msg_queue_;
     int                                  iterations_{0};
     TestMode                             mode_{TestMode::NONE};
     int                                  model_size_{0};
     size_t                               model_input_size_{0};
     bool                                 latency_input_ready_{false};
+    tflite::MicroOpResolver*             micro_op_resolver_;
     tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
     int8_t*                              output_tensor_{nullptr};
+    bool                                 sent_ready_for_model_{false};
+    bool                                 sent_ready_for_input_{false};
+    bool                                 sent_ready_for_task_{false};
+    bool                                 quit_{false};
 };
 
 #endif // EDGE_BENCH_CLIENT_H
