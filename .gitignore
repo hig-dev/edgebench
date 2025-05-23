@@ -1,6 +1,7 @@
 data/
 models/
 reports/
+.vscode/
 .DS_Store
 .huskyrc.json
 out
