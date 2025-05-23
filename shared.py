@@ -21,17 +21,6 @@ class Command(IntEnum):
     STOP = 2
     RESET = 3
 
-class Model(IntEnum):
-    UNKNOWN = 0
-    DEIT_SMALL = 1
-    DEIT_TINY = 2
-    EFFICIENT_VIT_B0 = 3
-    EFFICIENT_VIT_B1 = 4
-    EFFICIENT_VIT_B2 = 5
-    MOBILEONE_S0 = 6
-    MOBILEONE_S1 = 7
-    MOBILEONE_S4 = 8
-
 class Topic:
     def __init__(self, device_id):
         self.device_id = device_id
@@ -41,9 +30,6 @@ class Topic:
 
     def CONFIG_MODE(self):
         return f"bench/{self.device_id}/config/mode"
-    
-    def CONFIG_MODEL(self):
-        return f"bench/{self.device_id}/config/model"
 
     def MODEL(self):
         return f"bench/{self.device_id}/model"

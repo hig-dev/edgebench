@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 import queue
 import tempfile
 
-from shared import TestMode, ClientStatus, Command, Topic, Logger, Model
+from shared import TestMode, ClientStatus, Command, Topic, Logger
 
 BYTE_ORDER = "big"
 
@@ -28,7 +28,6 @@ class EdgeBenchClient:
         self.broker_port = broker_port
         self.iterations = 0
         self.mode = TestMode.NONE
-        self.model = Model.UNKNOWN
         self.interpreter = None
         self.latency_input_bytes = None
         self.message_queue = queue.Queue()
@@ -42,7 +41,6 @@ class EdgeBenchClient:
             self.logger.log("Connected to MQTT broker")
             # Subscribe to topics
             self.client.subscribe(self.topic.CONFIG_MODE(), qos=1)
-            self.client.subscribe(self.topic.CONFIG_MODEL(), qos=1)
             self.client.subscribe(self.topic.CONFIG_ITERATIONS(), qos=1)
             self.client.subscribe(self.topic.MODEL(), qos=1)
             self.client.subscribe(self.topic.INPUT_LATENCY(), qos=1)
@@ -121,9 +119,6 @@ class EdgeBenchClient:
             elif topic == t.CONFIG_ITERATIONS():
                 self.iterations = int.from_bytes(payload, byteorder=BYTE_ORDER)
                 l.log(f"Iterations set: {self.iterations}")
-            elif topic == t.CONFIG_MODEL():
-                self.model = Model.from_bytes(payload, byteorder=BYTE_ORDER)
-                l.log(f"Model set: {self.model.name}")
             elif topic == t.MODEL():
                 model_bytes = payload
                 l.log(f"Received model, size: {len(model_bytes)} bytes")
@@ -176,7 +171,6 @@ class EdgeBenchClient:
                     sent_ready_for_task = False
                     self.iterations = 0
                     self.mode = TestMode.NONE
-                    self.model = Model.UNKNOWN
                     self.interpreter = None
                     self.latency_input_bytes = None
                     continue

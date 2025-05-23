@@ -42,7 +42,6 @@ private:
     esp_mqtt_client_handle_t             client_;
     QueueHandle_t                        msg_queue_;
     int                                  iterations_{0};
-    Model                                model_{Model::UNKNOWN};
     TestMode                             mode_{TestMode::NONE};
     std::vector<uint8_t>                 latency_input_buffer_;
     std::vector<uint8_t>                 model_buffer_;  

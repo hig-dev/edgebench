@@ -9,7 +9,7 @@ import ai_edge_litert.interpreter as tflite
 from io import BytesIO
 import paho.mqtt.client as mqtt
 from pck_eval import PckEvaluator
-from shared import TestMode, ClientStatus, Command, Topic, Logger, Model
+from shared import TestMode, ClientStatus, Command, Topic, Logger
 from typing import Dict
 
 BYTE_ORDER = "big"
@@ -92,38 +92,6 @@ class EdgeBenchManager:
         self.client.publish(
             self.topic.CONFIG_MODE(),
             mode.to_bytes(length=1, byteorder=BYTE_ORDER),
-            qos=1,
-        )
-
-    def set_model(self, model_path: str):
-        model = Model.UNKNOWN
-        model_name = os.path.basename(model_path)
-        
-        if "DeitSmall" in model_name:
-            model = Model.DEIT_SMALL
-        elif "DeitTiny" in model_name:
-            model = Model.DEIT_TINY
-        elif "efficientvit_b0" in model_name:
-            model = Model.EFFICIENT_VIT_B0
-        elif "efficientvit_b1" in model_name:
-            model = Model.EFFICIENT_VIT_B1
-        elif "efficientvit_b2" in model_name:
-            model = Model.EFFICIENT_VIT_B2
-        elif "mobileone_s0" in model_name:
-            model = Model.MOBILEONE_S0
-        elif "mobileone_s1" in model_name:
-            model = Model.MOBILEONE_S1
-        elif "mobileone_s4" in model_name:
-            model = Model.MOBILEONE_S4
-        else:
-            print(
-                f"Unknown model name: {model_name}. Please check the model name."
-            )
-
-        self.logger.log(f"Setting model to {model.name}")
-        self.client.publish(
-            self.topic.CONFIG_MODEL(),
-            model.to_bytes(length=4, byteorder=BYTE_ORDER),
             qos=1,
         )
 
@@ -217,7 +185,6 @@ class EdgeBenchManager:
                 f"Running for model {model_path} ({model_index + 1}/{len(self.model_paths)})"
             )
             self.set_mode(TestMode.LATENCY)
-            self.set_model(model_path)
             self.set_iterations(iterations)
             input_data = np.load(SAMPLE_INPUT_NCHW_PATH)
             self.send_input(model_path, input_data, t.INPUT_LATENCY())
@@ -326,8 +293,6 @@ class EdgeBenchManager:
                 DATA_DIR, self.model_output_details[model_path], limit=limit
             )
             self.set_mode(TestMode.ACCURACY)
-            self.set_model(model_path)
-
             self.wait_for_status(ClientStatus.READY_FOR_MODEL)
             self.send_model(model_path)
             self.wait_for_status(ClientStatus.READY_FOR_TASK)

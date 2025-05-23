@@ -107,7 +107,6 @@ void EdgeBenchClient::onConnect() {
     ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
     esp_mqtt_client_subscribe(client_, topic_.CONFIG_MODE().c_str(),       1);
     esp_mqtt_client_subscribe(client_, topic_.CONFIG_ITERATIONS().c_str(), 1);
-    esp_mqtt_client_subscribe(client_, topic_.CONFIG_MODEL().c_str(),      1);
     esp_mqtt_client_subscribe(client_, topic_.MODEL().c_str(),             1);
     esp_mqtt_client_subscribe(client_, topic_.INPUT_LATENCY().c_str(),     1);
     esp_mqtt_client_subscribe(client_, topic_.INPUT_ACCURACY().c_str(),    1);
@@ -180,20 +179,6 @@ void EdgeBenchClient::run() {
                 (static_cast<int>(msg->payload[2]) <<  8) |
                 static_cast<int>(msg->payload[3]);
             ESP_LOGI(TAG, "Iterations set: %d", iterations_);
-        }
-        else if (t == topic_.CONFIG_MODEL()) {
-            if (msg->payload.size() != 4) {
-                ESP_LOGE(TAG, "Invalid model message");
-                break;
-            }
-            // Assume big-endian 4-byte integer
-            auto model_asint =
-                (static_cast<int>(msg->payload[0]) << 24) |
-                (static_cast<int>(msg->payload[1]) << 16) |
-                (static_cast<int>(msg->payload[2]) <<  8) |
-                static_cast<int>(msg->payload[3]);
-            model_ = static_cast<Model>(model_asint);
-            ESP_LOGI(TAG, "Model set: %d", int(model_));
         }
         else if (t == topic_.MODEL()) {
             model_buffer_ = std::move(msg->payload);
@@ -354,7 +339,6 @@ void EdgeBenchClient::run() {
                 model_buffer_.clear();
                 model_buffer_.resize(0);
                 mode_       = TestMode::NONE;
-                model_      = Model::UNKNOWN;
                 delete interpreter_;
                 interpreter_ = nullptr;
                 delete msg;
@@ -365,13 +349,11 @@ void EdgeBenchClient::run() {
 
         bool latency_config_ready = 
             mode_ == TestMode::LATENCY
-            && model_ != Model::UNKNOWN
             && iterations_ > 0 
             && (latency_input_buffer_.size() > 0 || sent_ready_for_model);
         
         bool accuracy_config_ready = 
-            mode_ == TestMode::ACCURACY
-            && model_ != Model::UNKNOWN;
+            mode_ == TestMode::ACCURACY;
 
         bool config_ready = latency_config_ready || accuracy_config_ready;
         bool interpreter_ready = interpreter_ != nullptr;
