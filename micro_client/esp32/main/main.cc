@@ -21,11 +21,10 @@
 #include "lwip/sys.h"
 #include "sdkconfig.h"
 #include "edge_bench_client.h"
+#include "heap_manager.h"
 
 #define ESP_MAXIMUM_RETRY  10
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
-
-static const char *TAG = "edgebench_client";
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -37,6 +36,7 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT      BIT1
 
 static int s_retry_num = 0;
+static const char* TAG = "EdgeBenchClient";
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -128,6 +128,9 @@ void wifi_init_sta(void)
 
 extern "C" void app_main(void* param)
 {
+    // Initialize Tensor Arena before everything else
+    reserve_tensor_arena();
+    reserve_model_buffer();
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

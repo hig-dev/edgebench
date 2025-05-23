@@ -14,26 +14,21 @@ from typing import Dict
 
 BYTE_ORDER = "big"
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
-REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
-SAMPLE_INPUT_NCHW_PATH = os.path.join(DATA_DIR, "sample_input_nchw.npy")
-TEST_INPUTS_PATH = os.path.join(DATA_DIR, "model_inputs.npy")
-
-
 class EdgeBenchManager:
     def __init__(
         self,
         device_id: str,
-        is_micro: bool,
         model_paths: list[str],
+        data_dir: str,
+        reports_dir: str,
         skip: bool = False,
         broker_host="127.0.0.1",
         broker_port=1883,
     ):
         self.device_id = device_id
-        self.is_micro = is_micro
         self.model_paths = model_paths
+        self.data_dir = data_dir
+        self.reports_dir = reports_dir
         self.skip = skip
         self.client = mqtt.Client(
             client_id=str(uuid.uuid4()),
@@ -46,6 +41,7 @@ class EdgeBenchManager:
         self.logger = Logger("EdgeBenchManager")
         self.topic = Topic(device_id)
         self.message_queue = queue.Queue()
+        self.latency_input: np.ndarray = np.load(os.path.join(data_dir, "sample_input_nchw.npy"))
 
         # Get model input details
         self.model_input_details: Dict[str, Dict] = {}
@@ -173,7 +169,7 @@ class EdgeBenchManager:
 
         for model_index, model_path in enumerate(self.model_paths):
             latency_test_report_path = os.path.join(
-                REPORTS_DIR,
+                self.reports_dir,
                 f"{device_id}/{os.path.basename(model_path)}_latency.json",
             )
             if self.skip and os.path.exists(latency_test_report_path):
@@ -186,12 +182,12 @@ class EdgeBenchManager:
             )
             self.set_mode(TestMode.LATENCY)
             self.set_iterations(iterations)
-            input_data = np.load(SAMPLE_INPUT_NCHW_PATH)
-            self.send_input(model_path, input_data, t.INPUT_LATENCY())
             self.wait_for_status(ClientStatus.READY_FOR_MODEL)
             self.send_model(model_path)
+            self.wait_for_status(ClientStatus.READY_FOR_INPUT)
+            self.send_input(model_path, self.latency_input, t.INPUT_LATENCY())
             self.wait_for_status(ClientStatus.READY_FOR_TASK)
-            
+
             if with_energy_measurement:
                 l.log("Ready for energy measurement?")
                 input("Press Enter to continue...")
@@ -277,7 +273,7 @@ class EdgeBenchManager:
 
         for model_index, model_path in enumerate(self.model_paths):
             accuracy_test_report_path = os.path.join(
-                REPORTS_DIR,
+                self.reports_dir,
                 f"{device_id}/{os.path.basename(model_path)}_accuracy.json",
             )
             if self.skip and os.path.exists(accuracy_test_report_path):
@@ -290,7 +286,7 @@ class EdgeBenchManager:
                 f"Running for model {model_path} ({model_index + 1}/{len(self.model_paths)})"
             )
             pck_evaluator = PckEvaluator(
-                DATA_DIR, self.model_output_details[model_path], limit=limit
+                self.data_dir, self.model_output_details[model_path], limit=limit
             )
             self.set_mode(TestMode.ACCURACY)
             self.wait_for_status(ClientStatus.READY_FOR_MODEL)
@@ -298,7 +294,7 @@ class EdgeBenchManager:
             self.wait_for_status(ClientStatus.READY_FOR_TASK)
 
             # Load test data
-            test_data = np.load(TEST_INPUTS_PATH)
+            test_data = np.load(os.path.join(self.data_dir, "model_inputs.npy"))
             if limit > 0:
                 test_data = test_data[:limit]
             test_data_length = test_data.shape[0]
@@ -351,23 +347,14 @@ def main():
         "--broker-port", type=int, default=1883, help="MQTT broker port"
     )
     parser.add_argument("--device", required=True, help="Device ID")
-    parser.add_argument("--micro", action="store_true", help="Micro client")
     parser.add_argument("--quick", action="store_true", help="Quick test")
     parser.add_argument("--skip", action="store_true", help="Skips if report exists")
     parser.add_argument("--energy", action="store_true", help="With energy measurement")
-    parser.add_argument(
-        "-m",
-        "--model",
-        type=str,
-        default="*",
-        help="Model filename in models/ or '*' for all",
-    )
-    parser.add_argument(
-        "--exlude_quantized", action="store_true", help="Exclude quantized models"
-    )
-    parser.add_argument(
-        "--exlude_classic", action="store_true", help="Exclude models with classic head"
-    )
+    parser.add_argument("--models-dir", default=os.path.join(os.path.dirname(__file__), "models"), help="Models directory")
+    parser.add_argument("--data-dir", default=os.path.join(os.path.dirname(__file__), "data"), help="Data directory")
+    parser.add_argument("--reports-dir", default=os.path.join(os.path.dirname(__file__), "reports"), help="Reports directory")
+    parser.add_argument("-f", "--filter", nargs="+", help="Model name filters (must contain all)")
+    parser.add_argument("-nf", "--not-filter", nargs="+", help="Model name filters (must not contain any)")
     parser.add_argument(
         "-n",
         "--iterations",
@@ -382,35 +369,44 @@ def main():
     if not args.latency and not args.accuracy:
         parser.error("At least one of --latency or --accuracy must be specified")
 
-    model_paths = []
-    if args.model and args.model != "*":
-        model_paths.append(os.path.join(MODELS_DIR, args.model))
-    else:
-        model_paths = [
-            os.path.join(MODELS_DIR, f)
-            for f in os.listdir(MODELS_DIR)
+    model_paths = sorted([
+            os.path.join(args.models_dir, f)
+            for f in os.listdir(args.models_dir)
             if f.endswith(".tflite")
-        ]
-
-    if args.exlude_quantized:
+        ])
+    print(f"Found {len(model_paths)} models in {args.models_dir}")
+    if args.filter:
         model_paths = [
-            path for path in model_paths if "_int8" not in os.path.basename(path)
+            p
+            for p in model_paths
+            if all(
+                filter_str in os.path.basename(p)
+                for filter_str in args.filter
+            )
         ]
-
-    if args.exlude_classic:
+    if args.not_filter:
         model_paths = [
-            path for path in model_paths if "-classic" not in os.path.basename(path)
+            p
+            for p in model_paths
+            if not any(
+                filter_str in os.path.basename(p)
+                for filter_str in args.not_filter
+            )
         ]
 
-    print(f"Found {len(model_paths)} models: {model_paths}")
+
+    print(f"Found {len(model_paths)} models after filtering:")
+    for model_path in model_paths:
+        print(f"  - {os.path.basename(model_path)}")
 
     manager = EdgeBenchManager(
-        args.device,
-        args.micro,
-        model_paths,
-        args.skip,
-        args.broker_host,
-        args.broker_port,
+        device_id=args.device,
+        model_paths=model_paths,
+        data_dir=args.data_dir,
+        reports_dir=args.reports_dir,
+        skip=args.skip,
+        broker_host=args.broker_host,
+        broker_port=args.broker_port,
     )
 
     if args.latency:

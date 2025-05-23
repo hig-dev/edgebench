@@ -43,15 +43,12 @@ private:
     QueueHandle_t                        msg_queue_;
     int                                  iterations_{0};
     TestMode                             mode_{TestMode::NONE};
-    std::vector<uint8_t>                 latency_input_buffer_;
-    std::vector<uint8_t>                 model_buffer_;  
+    int                                  model_size_{0};
+    size_t                               model_input_size_{0};
+    bool                                 latency_input_ready_{false};
     tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
     int8_t*                              output_tensor_{nullptr};
-    static constexpr int kArenaSize =    3200 * 1024;
-    uint8_t*                             tensor_arena_{nullptr};
-    std::string                          intermediate_topic_;
-    std::vector<uint8_t>                 intermediate_data_;
 };
 
 #endif // EDGE_BENCH_CLIENT_H

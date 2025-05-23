@@ -102,6 +102,7 @@ class EdgeBenchClient:
         l = self.logger
         t = self.topic
         sent_ready_for_model = False
+        sent_ready_for_input = False
         sent_ready_for_task = False
         self.connect()
         l.log(f"Connected as {self.device_id}")
@@ -132,15 +133,14 @@ class EdgeBenchClient:
                     )
                     self.interpreter.allocate_tensors()
                     l.log("Model loaded and tensors allocated")
-                if self.mode == TestMode.LATENCY:
-                    input_details = self.interpreter.get_input_details()
-                    latency_input = np.frombuffer(
-                        self.latency_input_bytes, dtype=input_details[0]["dtype"]
-                    ).reshape(input_details[0]["shape"])
-                    self.interpreter.set_tensor(input_details[0]["index"], latency_input)
             elif topic == t.INPUT_LATENCY():
                 self.latency_input_bytes = payload
                 l.log(f"Received input, size: {len(payload)} bytes")
+                input_details = self.interpreter.get_input_details()
+                latency_input = np.frombuffer(
+                    self.latency_input_bytes, dtype=input_details[0]["dtype"]
+                ).reshape(input_details[0]["shape"])
+                self.interpreter.set_tensor(input_details[0]["index"], latency_input)
                 
             elif topic == t.INPUT_ACCURACY():
                 input_bytes = payload
@@ -168,6 +168,7 @@ class EdgeBenchClient:
                 elif cmd == Command.RESET:
                     l.log("Received RESET command")
                     sent_ready_for_model = False
+                    sent_ready_for_input = False
                     sent_ready_for_task = False
                     self.iterations = 0
                     self.mode = TestMode.NONE
@@ -178,20 +179,25 @@ class EdgeBenchClient:
             latency_config_ready = (
                 self.mode == TestMode.LATENCY
                 and self.iterations > 0
-                and self.latency_input_bytes is not None
             )
             accuracy_config_ready = (
                 self.mode == TestMode.ACCURACY
             )
             config_ready = latency_config_ready or accuracy_config_ready
             interpreter_ready = self.interpreter is not None
+            input_ready = self.latency_input_bytes is not None or self.mode == TestMode.ACCURACY
 
             if not sent_ready_for_model and config_ready:
                 sent_ready_for_model = True
                 l.log("All config received, requesting model")
                 self.send_status(ClientStatus.READY_FOR_MODEL)
 
-            if not sent_ready_for_task and config_ready and interpreter_ready:
+            if not sent_ready_for_input and config_ready and interpreter_ready and self.mode == TestMode.LATENCY:
+                sent_ready_for_input = True
+                l.log("Interpreter ready, waiting for input")
+                self.send_status(ClientStatus.READY_FOR_INPUT)
+
+            if not sent_ready_for_task and config_ready and interpreter_ready and input_ready:
                 sent_ready_for_task = True
                 l.log("Ready for task, waiting for input or command")
                 self.send_status(ClientStatus.READY_FOR_TASK)
