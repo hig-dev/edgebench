@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 import queue
 import tempfile
 
-from shared import TestMode, ClientStatus, Command, Topic, Logger
+from shared import TestMode, ClientStatus, Command, Topic, Logger, Model
 
 BYTE_ORDER = "big"
 
@@ -26,10 +26,11 @@ class EdgeBenchClient:
         )
         self.broker_host = broker_host
         self.broker_port = broker_port
-        self.iterations = None
-        self.mode = None
-        self.model = None
-        self.input = None
+        self.iterations = 0
+        self.mode = TestMode.NONE
+        self.model = Model.UNKNOWN
+        self.interpreter = None
+        self.latency_input_bytes = None
         self.message_queue = queue.Queue()
 
         # Setup callbacks
@@ -41,6 +42,7 @@ class EdgeBenchClient:
             self.logger.log("Connected to MQTT broker")
             # Subscribe to topics
             self.client.subscribe(self.topic.CONFIG_MODE(), qos=1)
+            self.client.subscribe(self.topic.CONFIG_MODEL(), qos=1)
             self.client.subscribe(self.topic.CONFIG_ITERATIONS(), qos=1)
             self.client.subscribe(self.topic.MODEL(), qos=1)
             self.client.subscribe(self.topic.INPUT_LATENCY(), qos=1)
@@ -88,7 +90,7 @@ class EdgeBenchClient:
         self.logger.log(f"Running {self.iterations} iterations...")
         start_time = time.time()
         for i in range(self.iterations):
-            self.model.invoke()
+            self.interpreter.invoke()
         end_time = time.time()
         self.send_status(ClientStatus.DONE)
         elapsed_time = end_time - start_time
@@ -101,7 +103,8 @@ class EdgeBenchClient:
     def run(self):
         l = self.logger
         t = self.topic
-        sent_ready = False
+        sent_ready_for_model = False
+        sent_ready_for_task = False
         self.connect()
         l.log(f"Connected as {self.device_id}")
         self.send_status(ClientStatus.STARTED)
@@ -114,10 +117,13 @@ class EdgeBenchClient:
 
             if topic == t.CONFIG_MODE():
                 self.mode = TestMode.from_bytes(payload, byteorder=BYTE_ORDER)
-                l.log(f"Mode set: {self.mode}")
+                l.log(f"Mode set: {self.mode.name}")
             elif topic == t.CONFIG_ITERATIONS():
                 self.iterations = int.from_bytes(payload, byteorder=BYTE_ORDER)
                 l.log(f"Iterations set: {self.iterations}")
+            elif topic == t.CONFIG_MODEL():
+                self.model = Model.from_bytes(payload, byteorder=BYTE_ORDER)
+                l.log(f"Model set: {self.model.name}")
             elif topic == t.MODEL():
                 model_bytes = payload
                 l.log(f"Received model, size: {len(model_bytes)} bytes")
@@ -126,34 +132,35 @@ class EdgeBenchClient:
                     with open(model_path, "wb") as f:
                         f.write(model_bytes)
                     l.log(f"Model saved to {model_path}")
-                    self.model = tflite.Interpreter(
+                    self.interpreter = tflite.Interpreter(
                         model_path=model_path, num_threads=self.threads
                     )
-                    self.model.allocate_tensors()
+                    self.interpreter.allocate_tensors()
                     l.log("Model loaded and tensors allocated")
+                if self.mode == TestMode.LATENCY:
+                    input_details = self.interpreter.get_input_details()
+                    latency_input = np.frombuffer(
+                        self.latency_input_bytes, dtype=input_details[0]["dtype"]
+                    ).reshape(input_details[0]["shape"])
+                    self.interpreter.set_tensor(input_details[0]["index"], latency_input)
             elif topic == t.INPUT_LATENCY():
-                input_bytes = payload
-                input_details = self.model.get_input_details()
-                l.log(f"Received input, size: {len(input_bytes)} bytes")
-                self.input = np.frombuffer(
-                    input_bytes, dtype=input_details[0]["dtype"]
-                ).reshape(input_details[0]["shape"])
+                self.latency_input_bytes = payload
+                l.log(f"Received input, size: {len(payload)} bytes")
+                
             elif topic == t.INPUT_ACCURACY():
                 input_bytes = payload
                 l.log(f"Received input, size: {len(input_bytes)} bytes")
-                input_details = self.model.get_input_details()
-                output_details = self.model.get_output_details()
+                input_details = self.interpreter.get_input_details()
+                output_details = self.interpreter.get_output_details()
                 input = np.frombuffer(
                     input_bytes, dtype=input_details[0]["dtype"]
                 ).reshape(input_details[0]["shape"])
-                
-                self.model.set_tensor(input_details[0]["index"], input)
-                self.model.invoke()
-                output_data = self.model.get_tensor(output_details[0]["index"])
+
+                self.interpreter.set_tensor(input_details[0]["index"], input)
+                self.interpreter.invoke()
+                output_data = self.interpreter.get_tensor(output_details[0]["index"])
                 output_bytes = output_data.flatten().tobytes()
-                self.client.publish(
-                    self.topic.RESULT_ACCURACY(), output_bytes, qos=1
-                )
+                self.client.publish(self.topic.RESULT_ACCURACY(), output_bytes, qos=1)
             elif topic == t.CMD():
                 cmd = Command.from_bytes(payload, byteorder=BYTE_ORDER)
                 if cmd == Command.START_LATENCY_TEST:
@@ -165,33 +172,35 @@ class EdgeBenchClient:
                     break
                 elif cmd == Command.RESET:
                     l.log("Received RESET command")
-                    sent_ready = False
-                    self.iterations = None
-                    self.mode = None
-                    self.model = None
-                    self.input = None
+                    sent_ready_for_model = False
+                    sent_ready_for_task = False
+                    self.iterations = 0
+                    self.mode = TestMode.NONE
+                    self.model = Model.UNKNOWN
+                    self.interpreter = None
+                    self.latency_input_bytes = None
                     continue
-            if (
-                not sent_ready
-                and self.mode == TestMode.LATENCY
-                and self.iterations is not None
-                and self.model is not None
-                and self.input is not None
-            ):
-                sent_ready = True
-                l.log("All configurations received, loading model and input data")
-                # Prepare the model and input data
-                input_details = self.model.get_input_details()
-                self.model.set_tensor(input_details[0]["index"], self.input)
-                self.send_status(ClientStatus.READY)
-            elif (
-                not sent_ready
-                and self.mode == TestMode.ACCURACY
-                and self.model is not None
-            ):
-                sent_ready = True
-                l.log("All configurations received, loading model and input data")
-                self.send_status(ClientStatus.READY)
+            
+            latency_config_ready = (
+                self.mode == TestMode.LATENCY
+                and self.iterations > 0
+                and self.latency_input_bytes is not None
+            )
+            accuracy_config_ready = (
+                self.mode == TestMode.ACCURACY
+            )
+            config_ready = latency_config_ready or accuracy_config_ready
+            interpreter_ready = self.interpreter is not None
+
+            if not sent_ready_for_model and config_ready:
+                sent_ready_for_model = True
+                l.log("All config received, requesting model")
+                self.send_status(ClientStatus.READY_FOR_MODEL)
+
+            if not sent_ready_for_task and config_ready and interpreter_ready:
+                sent_ready_for_task = True
+                l.log("Ready for task, waiting for input or command")
+                self.send_status(ClientStatus.READY_FOR_TASK)
 
 
 def main():

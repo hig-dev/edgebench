@@ -4,20 +4,36 @@
 #include <string>
 
 enum class TestMode : int {
+    NONE     = 0,
     LATENCY = 1,
     ACCURACY = 2
 };
 
 enum class ClientStatus : int {
+    NONE    = 0,
     STARTED = 1,
-    READY   = 2,
-    DONE    = 3
+    READY_FOR_MODEL = 2,
+    READY_FOR_TASK  = 3,
+    DONE    = 4
 };
 
 enum class Command : int {
+    NONE              = 0,
     START_LATENCY_TEST = 1,
     STOP               = 2,
     RESET              = 3
+};
+
+enum class Model : int {
+    UNKNOWN = 0,
+    DEIT_SMALL = 1,
+    DEIT_TINY  = 2,
+    EFFICIENT_VIT_B0 = 3,
+    EFFICIENT_VIT_B1 = 4,
+    EFFICIENT_VIT_B2 = 5,
+    MOBILEONE_S0 = 6,
+    MOBILEONE_S1 = 7,
+    MOBILEONE_S4 = 8
 };
 
 class Topic {
@@ -31,6 +47,10 @@ public:
 
     std::string CONFIG_MODE() const {
         return "bench/" + device_id_ + "/config/mode";
+    }
+
+    std::string CONFIG_MODEL() const {
+        return "bench/" + device_id_ + "/config/model";
     }
 
     std::string MODEL() const {

@@ -107,6 +107,7 @@ void EdgeBenchClient::onConnect() {
     ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
     esp_mqtt_client_subscribe(client_, topic_.CONFIG_MODE().c_str(),       1);
     esp_mqtt_client_subscribe(client_, topic_.CONFIG_ITERATIONS().c_str(), 1);
+    esp_mqtt_client_subscribe(client_, topic_.CONFIG_MODEL().c_str(),      1);
     esp_mqtt_client_subscribe(client_, topic_.MODEL().c_str(),             1);
     esp_mqtt_client_subscribe(client_, topic_.INPUT_LATENCY().c_str(),     1);
     esp_mqtt_client_subscribe(client_, topic_.INPUT_ACCURACY().c_str(),    1);
@@ -150,7 +151,8 @@ void EdgeBenchClient::run() {
     vTaskDelay(2000 / portTICK_PERIOD_MS);
     sendStatus(ClientStatus::STARTED);
 
-    bool sent_ready = false;
+    bool sent_ready_for_model = false;
+    bool sent_ready_for_task  = false;
     MqttMessage *msg;
     ESP_LOGI(TAG, "Waiting for message...");
     while (xQueueReceive(msg_queue_, &msg, portMAX_DELAY) == pdPASS) {
@@ -179,6 +181,20 @@ void EdgeBenchClient::run() {
                 static_cast<int>(msg->payload[3]);
             ESP_LOGI(TAG, "Iterations set: %d", iterations_);
         }
+        else if (t == topic_.CONFIG_MODEL()) {
+            if (msg->payload.size() != 4) {
+                ESP_LOGE(TAG, "Invalid model message");
+                break;
+            }
+            // Assume big-endian 4-byte integer
+            auto model_asint =
+                (static_cast<int>(msg->payload[0]) << 24) |
+                (static_cast<int>(msg->payload[1]) << 16) |
+                (static_cast<int>(msg->payload[2]) <<  8) |
+                static_cast<int>(msg->payload[3]);
+            model_ = static_cast<Model>(model_asint);
+            ESP_LOGI(TAG, "Model set: %d", int(model_));
+        }
         else if (t == topic_.MODEL()) {
             model_buffer_ = std::move(msg->payload);
             const tflite::Model* model = tflite::GetModel(model_buffer_.data());
@@ -199,14 +215,60 @@ void EdgeBenchClient::run() {
                 break;
             }
 
-            auto micro_op_resolver = tflite::MicroMutableOpResolver<6>();
+            delete interpreter_;
+#if DEIT
+            auto micro_op_resolver = tflite::MicroMutableOpResolver<19>();
+            micro_op_resolver.AddAdd();
+            micro_op_resolver.AddBatchMatMul();
+            micro_op_resolver.AddConcatenation();
+            micro_op_resolver.AddConv2D();
+            micro_op_resolver.AddDepthwiseConv2D();
+            micro_op_resolver.AddFullyConnected();
+            micro_op_resolver.AddGather();
+            // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
+            //micro_op_resolver.AddGelu();
+            micro_op_resolver.AddMean();
+            micro_op_resolver.AddMul();
+            micro_op_resolver.AddPad();
+            micro_op_resolver.AddReshape();
+            micro_op_resolver.AddResizeNearestNeighbor();
+            micro_op_resolver.AddRsqrt();
+            micro_op_resolver.AddSoftmax();
+            micro_op_resolver.AddSquaredDifference();
+            micro_op_resolver.AddStridedSlice();
+            micro_op_resolver.AddSub();
+            micro_op_resolver.AddTranspose();
+#elif EFFICIENTVIT
+            auto micro_op_resolver = tflite::MicroMutableOpResolver<17>();
+            micro_op_resolver.AddAdd();
+            micro_op_resolver.AddBatchMatMul();
+            micro_op_resolver.AddConcatenation();
+            micro_op_resolver.AddConv2D();
+            micro_op_resolver.AddDepthwiseConv2D();
+            micro_op_resolver.AddDequantize();
+            micro_op_resolver.AddDiv();
+            micro_op_resolver.AddHardSwish();
+            micro_op_resolver.AddMul();
+            micro_op_resolver.AddPad();
+            micro_op_resolver.AddPadV2();
+            micro_op_resolver.AddQuantize();
+            micro_op_resolver.AddRelu();
+            micro_op_resolver.AddReshape();
+            micro_op_resolver.AddResizeNearestNeighbor();
+            micro_op_resolver.AddStridedSlice();
+            micro_op_resolver.AddTranspose();
+#else // MOBILEONE
+            auto micro_op_resolver = tflite::MicroMutableOpResolver<8>();
             micro_op_resolver.AddAdd();
             micro_op_resolver.AddConv2D();
             micro_op_resolver.AddDepthwiseConv2D();
             micro_op_resolver.AddMul();
             micro_op_resolver.AddPad();
             micro_op_resolver.AddResizeNearestNeighbor();
-            delete interpreter_;
+            micro_op_resolver.AddLogistic();
+            micro_op_resolver.AddMean();
+#endif
+
             interpreter_ = new tflite::MicroInterpreter(model,
                                                         micro_op_resolver,
                                                         tensor_arena_,
@@ -219,6 +281,20 @@ void EdgeBenchClient::run() {
             input_tensor_  = interpreter_->typed_input_tensor<int8_t>(0);
             output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
             ESP_LOGI(TAG, "Model loaded; tensors allocated");
+
+            if (mode_ == TestMode::LATENCY) {
+                ESP_LOGI(TAG, "Copy input data to tensor");
+                size_t input_size = interpreter_->input_tensor(0)->bytes;
+                if (latency_input_buffer_.size() != input_size) {
+                    ESP_LOGE(TAG, "Invalid input data size, expected %zu, got %zu",
+                            input_size,
+                            latency_input_buffer_.size());
+                    break;
+                }
+                std::memcpy(input_tensor_, latency_input_buffer_.data(), input_size);
+                latency_input_buffer_.clear();
+                latency_input_buffer_.resize(0);
+            }
         }
         else if (t == topic_.INPUT_LATENCY()) {
             latency_input_buffer_ = std::move(msg->payload);
@@ -270,13 +346,15 @@ void EdgeBenchClient::run() {
                 disconnect();
                 break;
             } else if (cmd == Command::RESET) {
-                sent_ready = false;
+                sent_ready_for_model = false;
+                sent_ready_for_task  = false;
                 iterations_ = 0;
                 latency_input_buffer_.clear();
                 latency_input_buffer_.resize(0);
                 model_buffer_.clear();
                 model_buffer_.resize(0);
-                mode_       = TestMode::LATENCY;
+                mode_       = TestMode::NONE;
+                model_      = Model::UNKNOWN;
                 delete interpreter_;
                 interpreter_ = nullptr;
                 delete msg;
@@ -285,34 +363,29 @@ void EdgeBenchClient::run() {
             }
         }
 
-        if (!sent_ready
-            && mode_ == TestMode::LATENCY
-            && iterations_ > 0
-            && interpreter_ != nullptr
-            && latency_input_buffer_.size() > 0)
-        {
-            sent_ready = true;
-            ESP_LOGI(TAG, "Copy input data to tensor");
-            size_t input_size = interpreter_->input_tensor(0)->bytes;
-            if (latency_input_buffer_.size() != input_size) {
-                ESP_LOGE(TAG, "Invalid input data size, expected %zu, got %zu",
-                         input_size,
-                         latency_input_buffer_.size());
-                break;
-            }
-            std::memcpy(input_tensor_, latency_input_buffer_.data(), input_size);
-            latency_input_buffer_.clear();
-            latency_input_buffer_.resize(0);
-            ESP_LOGI(TAG, "All config received, READY");
-            sendStatus(ClientStatus::READY);
+        bool latency_config_ready = 
+            mode_ == TestMode::LATENCY
+            && model_ != Model::UNKNOWN
+            && iterations_ > 0 
+            && (latency_input_buffer_.size() > 0 || sent_ready_for_model);
+        
+        bool accuracy_config_ready = 
+            mode_ == TestMode::ACCURACY
+            && model_ != Model::UNKNOWN;
+
+        bool config_ready = latency_config_ready || accuracy_config_ready;
+        bool interpreter_ready = interpreter_ != nullptr;
+
+        if (!sent_ready_for_model && config_ready) {
+            sent_ready_for_model = true;
+            ESP_LOGI(TAG, "All config received, requesting model");
+            sendStatus(ClientStatus::READY_FOR_MODEL);
         }
-        else if (!sent_ready
-            && mode_ == TestMode::ACCURACY
-            && interpreter_ != nullptr)
-        {
-            sent_ready = true;
-            ESP_LOGI(TAG, "All config received, READY");
-            sendStatus(ClientStatus::READY);
+        
+        if (!sent_ready_for_task && config_ready && interpreter_ready) {
+            sent_ready_for_task = true;
+            ESP_LOGI(TAG, "Ready for task, waiting for input or command");
+            sendStatus(ClientStatus::READY_FOR_TASK);
         }
         delete msg;
     }

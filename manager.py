@@ -9,7 +9,7 @@ import ai_edge_litert.interpreter as tflite
 from io import BytesIO
 import paho.mqtt.client as mqtt
 from pck_eval import PckEvaluator
-from shared import TestMode, ClientStatus, Command, Topic, Logger
+from shared import TestMode, ClientStatus, Command, Topic, Logger, Model
 from typing import Dict
 
 BYTE_ORDER = "big"
@@ -88,10 +88,42 @@ class EdgeBenchManager:
         self.logger.log("Disconnected from MQTT broker")
 
     def set_mode(self, mode: TestMode):
-        self.logger.log(f"Setting mode to {mode}")
+        self.logger.log(f"Setting mode to {mode.name}")
         self.client.publish(
             self.topic.CONFIG_MODE(),
             mode.to_bytes(length=1, byteorder=BYTE_ORDER),
+            qos=1,
+        )
+
+    def set_model(self, model_path: str):
+        model = Model.UNKNOWN
+        model_name = os.path.basename(model_path)
+        
+        if "DeitSmall" in model_name:
+            model = Model.DEIT_SMALL
+        elif "DeitTiny" in model_name:
+            model = Model.DEIT_TINY
+        elif "efficientvit_b0" in model_name:
+            model = Model.EFFICIENT_VIT_B0
+        elif "efficientvit_b1" in model_name:
+            model = Model.EFFICIENT_VIT_B1
+        elif "efficientvit_b2" in model_name:
+            model = Model.EFFICIENT_VIT_B2
+        elif "mobileone_s0" in model_name:
+            model = Model.MOBILEONE_S0
+        elif "mobileone_s1" in model_name:
+            model = Model.MOBILEONE_S1
+        elif "mobileone_s4" in model_name:
+            model = Model.MOBILEONE_S4
+        else:
+            print(
+                f"Unknown model name: {model_name}. Please check the model name."
+            )
+
+        self.logger.log(f"Setting model to {model.name}")
+        self.client.publish(
+            self.topic.CONFIG_MODEL(),
+            model.to_bytes(length=4, byteorder=BYTE_ORDER),
             qos=1,
         )
 
@@ -133,7 +165,7 @@ class EdgeBenchManager:
         self.client.publish(topic, input_data_bytes, qos=1)
 
     def send_command(self, command: Command):
-        self.logger.log(f"Sending command {command}")
+        self.logger.log(f"Sending command {command.name}")
         self.client.publish(
             self.topic.CMD(), command.to_bytes(length=1, byteorder=BYTE_ORDER), qos=1
         )
@@ -141,33 +173,19 @@ class EdgeBenchManager:
     def wait_for_message(self, timeout=None) -> mqtt.MQTTMessage:
         return self.message_queue.get(block=True, timeout=timeout)
 
-    def wait_for_started(self):
-        client_started = False
-        self.logger.log("Waiting for client to start...")
-        while not client_started:
-            message = self.wait_for_message()
-            if (
-                message
-                and message.topic == self.topic.STATUS()
-                and ClientStatus.from_bytes(message.payload, byteorder=BYTE_ORDER)
-                == ClientStatus.STARTED
-            ):
-                client_started = True
-                self.logger.log(f"{self.device_id} started.")
-
-    def wait_for_ready(self):
-        self.logger.log("Waiting for client to be ready...")
+    def wait_for_status(self, status: ClientStatus):
         ready = False
+        self.logger.log(f"Waiting for client status {status.name}")
         while not ready:
             message = self.wait_for_message()
             if (
                 message
                 and message.topic == self.topic.STATUS()
                 and ClientStatus.from_bytes(message.payload, byteorder=BYTE_ORDER)
-                == ClientStatus.READY
+                == status
             ):
                 ready = True
-                self.logger.log(f"{self.device_id} is ready.")
+                self.logger.log(f'Client status for "{self.device_id}" changed to {status.name}')
 
     def run_latency(
         self,
@@ -183,7 +201,7 @@ class EdgeBenchManager:
 
         if not already_connected:
             self.connect()
-            self.wait_for_started()
+            self.wait_for_status(ClientStatus.STARTED)
 
         for model_index, model_path in enumerate(self.model_paths):
             latency_test_report_path = os.path.join(
@@ -199,11 +217,13 @@ class EdgeBenchManager:
                 f"Running for model {model_path} ({model_index + 1}/{len(self.model_paths)})"
             )
             self.set_mode(TestMode.LATENCY)
+            self.set_model(model_path)
             self.set_iterations(iterations)
-            self.send_model(model_path)
             input_data = np.load(SAMPLE_INPUT_NCHW_PATH)
             self.send_input(model_path, input_data, t.INPUT_LATENCY())
-            self.wait_for_ready()
+            self.wait_for_status(ClientStatus.READY_FOR_MODEL)
+            self.send_model(model_path)
+            self.wait_for_status(ClientStatus.READY_FOR_TASK)
             
             if with_energy_measurement:
                 l.log("Ready for energy measurement?")
@@ -286,7 +306,7 @@ class EdgeBenchManager:
 
         if not already_connected:
             self.connect()
-            self.wait_for_started()
+            self.wait_for_status(ClientStatus.STARTED)
 
         for model_index, model_path in enumerate(self.model_paths):
             accuracy_test_report_path = os.path.join(
@@ -306,11 +326,11 @@ class EdgeBenchManager:
                 DATA_DIR, self.model_output_details[model_path], limit=limit
             )
             self.set_mode(TestMode.ACCURACY)
+            self.set_model(model_path)
 
-            if not self.is_micro:
-                self.send_model(model_path)
-
-            self.wait_for_ready()
+            self.wait_for_status(ClientStatus.READY_FOR_MODEL)
+            self.send_model(model_path)
+            self.wait_for_status(ClientStatus.READY_FOR_TASK)
 
             # Load test data
             test_data = np.load(TEST_INPUTS_PATH)
