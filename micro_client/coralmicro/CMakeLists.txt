@@ -19,4 +19,5 @@ add_executable_m7(coralmicro-app
 
 target_link_libraries(coralmicro-app
         libs_base-m7_freertos
+        libs_base-m7_wifi
 )

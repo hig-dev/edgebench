@@ -12,25 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "libs/base/led.h"
-#include "libs/base/tasks.h"
 #include "third_party/freertos_kernel/include/FreeRTOS.h"
 #include "third_party/freertos_kernel/include/task.h"
-
-[[noreturn]] void blink_task(void* param) {
-  auto led_type = static_cast<coralmicro::Led*>(param);
-  bool on = true;
-  while (true) {
-    on = !on;
-    coralmicro::LedSet(*led_type, on);
-    vTaskDelay(pdMS_TO_TICKS(500));
-  }
-}
+#include "coralmicro/libs/base/tasks.h"
+#include "coralmicro/libs/base/wifi.h"
+#include "../shared/wifi_config.h"
 
 extern "C" void app_main(void* param) {
-  (void)param;
-  auto user_led = coralmicro::Led::kUser;
-  xTaskCreate(&blink_task, "blink_user_led_task", configMINIMAL_STACK_SIZE,
-              &user_led, coralmicro::kAppTaskPriority, nullptr);
-  vTaskSuspend(nullptr);
+  printf("Attempting to use Wi-Fi...\r\n");
+  bool wifiTurnOnSuccess = coralmicro::WiFiTurnOn(true);
+  if (!wifiTurnOnSuccess) {
+    printf("Failed to turn on Wi-Fi\r\n");
+    return;
+  }
+  coralmicro::WiFiSetDefaultSsid(WIFI_SSID);
+  coralmicro::WiFiSetDefaultPsk(WIFI_PASS);
+  bool wifiConnectSuccess = coralmicro::WiFiConnect();
+  if (!wifiConnectSuccess) {
+    printf("Failed to connect to Wi-Fi\r\n");
+    return;
+  }
+  printf("Wi-Fi connected\r\n");
+
+  int counter = 0;
+  while(true) {
+    printf("Tick %d\r\n", counter++);
+    printf("Wi-Fi status: turned on: %d, connected: %d\r\n",
+           wifiTurnOnSuccess, wifiConnectSuccess);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
 }
