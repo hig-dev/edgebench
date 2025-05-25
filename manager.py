@@ -295,9 +295,11 @@ class EdgeBenchManager:
 
             # Load test data
             test_data = np.load(os.path.join(self.data_dir, "model_inputs.npy"))
+            l.log(f"Loaded test data with shape {test_data.shape}")
             if limit > 0:
                 test_data = test_data[:limit]
             test_data_length = test_data.shape[0]
+            l.log(f"Test data length: {test_data_length}")
             for index, input_data in enumerate(test_data):
                 l.log(f"Sending input {index + 1}/{test_data_length}")
                 input_data = np.expand_dims(input_data, axis=0)
@@ -319,6 +321,7 @@ class EdgeBenchManager:
             accuracy_test_report = {
                 "device_id": device_id,
                 "model_name": os.path.basename(model_path),
+                "test_data_length": test_data_length,
             }
             accuracy_test_report.update(pck_metrics)
 
@@ -347,7 +350,6 @@ def main():
         "--broker-port", type=int, default=1883, help="MQTT broker port"
     )
     parser.add_argument("--device", required=True, help="Device ID")
-    parser.add_argument("--quick", action="store_true", help="Quick test")
     parser.add_argument("--skip", action="store_true", help="Skips if report exists")
     parser.add_argument("--energy", action="store_true", help="With energy measurement")
     parser.add_argument("--models-dir", default=os.path.join(os.path.dirname(__file__), "models"), help="Models directory")
@@ -361,6 +363,13 @@ def main():
         type=int,
         default=100,
         help="Number of iterations for latency test",
+    )
+    parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit for accuracy test (0 for no limit)",
     )
     parser.add_argument("--latency", action="store_true", help="Run latency test")
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy test")
@@ -411,14 +420,14 @@ def main():
 
     if args.latency:
         manager.run_latency(
-            iterations=2 if args.quick else args.iterations,
+            iterations=args.iterations,
             disconnect_after=not args.accuracy,
             with_energy_measurement=args.energy,
         )
 
     if args.accuracy:
         manager.run_accuracy(
-            limit=2 if args.quick else 0, already_connected=args.latency
+            args.limit, already_connected=args.latency
         )
 
 
