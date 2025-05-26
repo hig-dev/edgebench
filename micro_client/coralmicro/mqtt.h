@@ -10,11 +10,12 @@ extern "C" {
 
 // MQTT configuration macros
 #define MQTT_CLIENT_IDENTIFIER       "coraledgebench"
-#define MQTT_BUFFER_SIZE              1024
+#define MQTT_BUFFER_SIZE              64*1024
 #define MQTT_MAX_PUBLISH_RECORDS      15
 #define MQTT_KEEP_ALIVE_SECONDS       60
 #define MQTT_CONNECT_TIMEOUT_MS       1000
 #define MQTT_TRANSPORT_TIMEOUT_MS     200
+#define MQTT_PROCESS_LOOP_TIMEOUT_MS  2000 
 
 struct NetworkContext
 {
@@ -39,7 +40,41 @@ static MQTTPubAckInfo_t incomingPublishRecords[ MQTT_MAX_PUBLISH_RECORDS ];
  * @param port The network port of the MQTT broker.
  * @return true if the connection was successful, false otherwise.
  */
-bool connectToMqttBroker(const char* broker_url, int port);
+bool connectToMqttBroker(const char* broker_url, int port, MQTTEventCallback_t userCallback);
+
+/**
+ * @brief Disconnect from the MQTT broker.
+ * @return true if the disconnection was successful, false otherwise.
+ */
+bool disconnectFromMqttBroker();
+
+/**
+ * @brief Publish a message to an MQTT topic.
+ *
+ * @param topic The topic to publish to.
+ * @param payload The message payload.
+ * @param payload_length The length of the payload.
+ * @param qos The Quality of Service level for the publish.
+ * @return true if the publish was successful, false otherwise.
+ */
+bool publishMqttMessage(const char* topic, const uint8_t* payload, size_t payload_length, MQTTQoS_t qos);
+
+/**
+ * @brief Subscribe to an MQTT topic.
+ *
+ * @param topic The topic to subscribe to.
+ * @param qos The Quality of Service level for the subscription.
+ * @return true if the subscription was successful, false otherwise.
+ */
+bool subscribeToMqttTopic(const char* topic, MQTTQoS_t qos);
+
+/**
+ * @brief Process the MQTT loop, handling incoming messages and sending keep-alive packets.
+ *
+ * This function should be called periodically to maintain the MQTT connection.
+ */
+MQTTStatus_t processMqttLoopWithTimeout(uint32_t ulTimeoutMs );
+
 
 #ifdef __cplusplus
 }

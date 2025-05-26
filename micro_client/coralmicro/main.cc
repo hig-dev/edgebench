@@ -18,7 +18,7 @@
 #include "coralmicro/libs/base/wifi.h"
 #include "../shared/wifi_config.h"
 #include "../shared/mqtt_config.h"
-#include "mqtt.h"
+#include "edge_bench_client.h"
 
 
 extern "C" void app_main(void* param) {
@@ -37,18 +37,8 @@ extern "C" void app_main(void* param) {
   }
   printf("Wi-Fi connected\r\n");
 
-  bool mqttConnectSuccess = connectToMqttBroker(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
-  if (!mqttConnectSuccess) {
-    printf("Failed to connect to MQTT broker\r\n");
-    return;
-  }
-
-  int counter = 0;
-  while(true) {
-    printf("Tick %d\r\n", counter++);
-    printf("Wi-Fi status: turned on: %d, connected: %d\r\n",
-           wifiTurnOnSuccess, wifiConnectSuccess);
-    printf("MQTT status: connected: %d\r\n", mqttConnectSuccess);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-  }
+  auto client  = EdgeBenchClient("coralmicro",
+                                 MQTT_BROKER_HOST,
+                                 MQTT_BROKER_PORT);
+  client.run();
 }

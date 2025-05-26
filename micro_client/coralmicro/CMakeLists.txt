@@ -22,6 +22,7 @@ include_directories(${MQTT_INCLUDE_PUBLIC_DIRS})
 add_executable_m7(coralmicro-app
         main.cc
         mqtt.cc
+        edge_bench_client.cc
         ${MQTT_SOURCES}
         ${MQTT_SERIALIZER_SOURCES}
 )
