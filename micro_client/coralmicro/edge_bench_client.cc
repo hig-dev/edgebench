@@ -26,48 +26,6 @@ void ESP_LOGE(const char* tag, const char* format, ...) {
     va_end(args);
 }
 
-static void mqtt_event_handler(MQTTContext_t * pxMQTTContext,
-                              MQTTPacketInfo_t * pxPacketInfo,
-                              MQTTDeserializedInfo_t * pxDeserializedInfo)
-{
-    ( void ) pxMQTTContext;
-    if( ( pxPacketInfo->type & 0xF0U ) == MQTT_PACKET_TYPE_PUBLISH )
-    {
-        // Handle incoming PUBLISH messages
-        printf("PUBLISH received for packet id %u.\n\n",
-                   pxDeserializedInfo->packetIdentifier );
-        MQTTPublishInfo_t * pxPublishInfo = pxDeserializedInfo->pPublishInfo;
-        printf("Topic: %.*s\n", pxPublishInfo->topicNameLength, pxPublishInfo->pTopicName );
-        printf("Payload length: %zu\n", pxPublishInfo->payloadLength );
-        // Invoke callback to process the incoming publish
-        std::vector<uint8_t> payload(
-            static_cast<const uint8_t*>(pxPublishInfo->pPayload),
-            static_cast<const uint8_t*>(pxPublishInfo->pPayload) + pxPublishInfo->payloadLength);
-        std::string topic(pxPublishInfo->pTopicName, pxPublishInfo->topicNameLength);
-        if (edgeBenchClientInstance_ == nullptr) {
-            ESP_LOGE(TAG, "EdgeBenchClient instance is null");
-            return;
-        }
-        edgeBenchClientInstance_->handleMessage(topic, payload);
-    }
-    else
-    {
-        // Handle ACKs
-        switch ( pxPacketInfo->type )
-        {
-            case MQTT_PACKET_TYPE_PUBACK:
-                printf("PUBACK received for packet ID %u.\r\n", pxDeserializedInfo->packetIdentifier );
-                break;
-
-            case MQTT_PACKET_TYPE_SUBACK:
-                printf("SUBACK received for packet ID %u.\r\n", pxDeserializedInfo->packetIdentifier );
-                break;
-            default:
-                printf("Received unhandled packet type: %02X\r\n", pxPacketInfo->type );
-                break;
-        }
-    }
-}
 
 EdgeBenchClient::EdgeBenchClient(const std::string& device_id,
                                  const std::string& broker_host,
@@ -82,12 +40,11 @@ EdgeBenchClient::EdgeBenchClient(const std::string& device_id,
 
 void EdgeBenchClient::connect() {
     ESP_LOGI(TAG, "Connecting to %s:%d", broker_host_.c_str(), broker_port_);
-    bool mqttConnectSuccess = connectToMqttBroker(broker_host_.c_str(), broker_port_, mqtt_event_handler);
+    bool mqttConnectSuccess = connectToMqttBroker(broker_host_.c_str(), broker_port_);
     if (!mqttConnectSuccess) {
         ESP_LOGE(TAG, "Failed to connect to MQTT broker");
         return;
     }
-    onConnect();
 }
 
 void EdgeBenchClient::disconnect() {
@@ -139,11 +96,9 @@ void EdgeBenchClient::startAccuracyTest() {
     ESP_LOGI(TAG, "Accuracy result sent");
 }
 
-void EdgeBenchClient::onConnect() {
-    ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-    
-    processMqttLoopWithTimeout(MQTT_PROCESS_LOOP_TIMEOUT_MS);
-    
+void EdgeBenchClient::subscribeToTopics() {
+    ESP_LOGI(TAG, "Subscribe to topics");
+        
     subscribeToMqttTopic(topic_.CONFIG_MODE().c_str(),       MQTTQoS1);
     subscribeToMqttTopic(topic_.CONFIG_ITERATIONS().c_str(), MQTTQoS1);
     subscribeToMqttTopic(topic_.MODEL().c_str(),             MQTTQoS1);
@@ -312,12 +267,21 @@ void EdgeBenchClient::run() {
     ESP_LOGI(TAG, "Starting EdgeBenchClient for device %s", device_id_.c_str());
     connect();
     ESP_LOGI(TAG, "Connected as %s", device_id_.c_str());
-    // Wait for the subscriptions to be established
+    
+    xTaskCreate(
+        processMqttLoop,
+        "MqttLoop",
+        4 * 1024,
+        nullptr,
+        1,
+        nullptr);
+
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    subscribeToTopics();
     vTaskDelay(2000 / portTICK_PERIOD_MS);
     sendStatus(ClientStatus::STARTED);
     while (!quit_) {
-        processMqttLoopWithTimeout(MQTT_PROCESS_LOOP_TIMEOUT_MS);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     disconnect();
 }

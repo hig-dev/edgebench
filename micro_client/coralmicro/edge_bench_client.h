@@ -26,7 +26,7 @@ public:
     void handleMessage(const std::string &topic, const std::vector<uint8_t> &payload);
 
 private:
-    void onConnect();
+    void subscribeToTopics();
     void startLatencyTest();
     void startAccuracyTest();
 

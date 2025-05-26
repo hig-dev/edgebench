@@ -10,28 +10,20 @@ extern "C" {
 
 // MQTT configuration macros
 #define MQTT_CLIENT_IDENTIFIER       "coraledgebench"
-#define MQTT_BUFFER_SIZE              64*1024
+#define MQTT_BUFFER_SIZE              8*1024
 #define MQTT_MAX_PUBLISH_RECORDS      15
 #define MQTT_KEEP_ALIVE_SECONDS       60
 #define MQTT_CONNECT_TIMEOUT_MS       1000
 #define MQTT_TRANSPORT_TIMEOUT_MS     200
 #define MQTT_PROCESS_LOOP_TIMEOUT_MS  2000 
 
-struct NetworkContext
-{
-    int socketFd;
-};
-
 // MQTT network context
-static NetworkContext networkContext;
 
 // Global MQTT objects
 static uint8_t mqttSharedBuffer[ MQTT_BUFFER_SIZE ];
 static MQTTFixedBuffer_t mqttBuffer = { mqttSharedBuffer, MQTT_BUFFER_SIZE };
 static MQTTContext_t mqttContext;
-static TransportInterface_t mqttTransport;
-static MQTTPubAckInfo_t outgoingPublishRecords[ MQTT_MAX_PUBLISH_RECORDS ];
-static MQTTPubAckInfo_t incomingPublishRecords[ MQTT_MAX_PUBLISH_RECORDS ];
+
 
 /**
  * @brief Connect to MQTT broker.
@@ -40,7 +32,7 @@ static MQTTPubAckInfo_t incomingPublishRecords[ MQTT_MAX_PUBLISH_RECORDS ];
  * @param port The network port of the MQTT broker.
  * @return true if the connection was successful, false otherwise.
  */
-bool connectToMqttBroker(const char* broker_url, int port, MQTTEventCallback_t userCallback);
+bool connectToMqttBroker(const char* broker_url, int port);
 
 /**
  * @brief Disconnect from the MQTT broker.
@@ -73,7 +65,7 @@ bool subscribeToMqttTopic(const char* topic, MQTTQoS_t qos);
  *
  * This function should be called periodically to maintain the MQTT connection.
  */
-MQTTStatus_t processMqttLoopWithTimeout(uint32_t ulTimeoutMs );
+void processMqttLoop(void * pvParameters);
 
 
 #ifdef __cplusplus

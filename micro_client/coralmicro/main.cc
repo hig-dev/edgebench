@@ -18,27 +18,40 @@
 #include "coralmicro/libs/base/wifi.h"
 #include "../shared/wifi_config.h"
 #include "../shared/mqtt_config.h"
-#include "edge_bench_client.h"
+#include "mqtt.h"
+#include "../shared/mqtt_topic.h"
 
-
-extern "C" void app_main(void* param) {
+extern "C" void app_main(void *param)
+{
   printf("Attempting to use Wi-Fi...\r\n");
   bool wifiTurnOnSuccess = coralmicro::WiFiTurnOn(true);
-  if (!wifiTurnOnSuccess) {
+  if (!wifiTurnOnSuccess)
+  {
     printf("Failed to turn on Wi-Fi\r\n");
     return;
   }
   coralmicro::WiFiSetDefaultSsid(WIFI_SSID);
   coralmicro::WiFiSetDefaultPsk(WIFI_PASS);
   bool wifiConnectSuccess = coralmicro::WiFiConnect();
-  if (!wifiConnectSuccess) {
+  if (!wifiConnectSuccess)
+  {
     printf("Failed to connect to Wi-Fi\r\n");
     return;
   }
   printf("Wi-Fi connected\r\n");
 
-  auto client  = EdgeBenchClient("coralmicro",
-                                 MQTT_BROKER_HOST,
-                                 MQTT_BROKER_PORT);
-  client.run();
+  // auto client  = EdgeBenchClient("coralmicro",
+  //                                MQTT_BROKER_HOST,
+  //                                MQTT_BROKER_PORT);
+  // client.run();
+
+  bool mqttConnectSuccess = connectToMqttBroker(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
+  if (!mqttConnectSuccess)
+  {
+    printf("Failed to connect to MQTT broker\r\n");
+    return;
+  }
+  auto topic = Topic("coralmicro");
+  subscribeToMqttTopic(topic.CONFIG_MODE().c_str(),       MQTTQoS0);
+  processMqttLoop(nullptr);
 }

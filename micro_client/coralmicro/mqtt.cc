@@ -6,6 +6,12 @@
 #include "third_party/freertos_kernel/include/FreeRTOS.h"
 #include "third_party/freertos_kernel/include/task.h"
 
+struct NetworkContext
+{
+    int socketFd;
+};
+
+static NetworkContext networkContext = {-1};
 
 // Helper: get current time in ms
 static uint32_t prvGetTimeMs( void )
@@ -20,7 +26,17 @@ static int32_t transportSend( NetworkContext_t * pNetworkContext,
 {
     int fd = pNetworkContext->socketFd;
     auto status = coralmicro::WriteBytes( fd, pBuffer, bytesToSend );
-    return ( status == coralmicro::IOStatus::kOk ) ? ( int32_t ) bytesToSend : -1;
+    if ( status == coralmicro::IOStatus::kOk )
+    {
+        printf("Sent %d bytes to socket %d\r\n", (int)bytesToSend, fd);
+        return ( int32_t ) bytesToSend;
+    }
+    else
+    {
+        printf("Failed to send %d bytes to socket %d: %s (%d)\r\n",
+               (int)bytesToSend, fd, strerror(errno), errno);
+        return -1; // Indicate error
+    }
 }
 
 // Transport receive using coralmicro network API
@@ -31,15 +47,64 @@ static int32_t transportRecv( NetworkContext_t * pNetworkContext,
     int fd = pNetworkContext->socketFd;
     auto status = coralmicro::ReadBytes( fd, pBuffer, bytesToRecv );
     if( status == coralmicro::IOStatus::kOk ) {
+        printf("Received %d bytes from socket %d\r\n", (int)bytesToRecv, fd);
         return ( int32_t ) bytesToRecv;
     } else if( status == coralmicro::IOStatus::kEof ) {
+        printf("Socket %d closed by peer\r\n", fd);
         return 0;
     }
+    printf("Failed to receive %d bytes from socket %d: %s (%d)\r\n",
+           (int)bytesToRecv, fd, strerror(errno), errno);
     return -1;
 }
 
+static void mqtt_event_handler(MQTTContext_t * pxMQTTContext,
+                              MQTTPacketInfo_t * pxPacketInfo,
+                              MQTTDeserializedInfo_t * pxDeserializedInfo)
+{
+    ( void ) pxMQTTContext;
+    printf("MQTT event handler called \r\n");
+    if( ( pxPacketInfo->type & 0xF0U ) == MQTT_PACKET_TYPE_PUBLISH )
+    {
+        // Handle incoming PUBLISH messages
+        printf("PUBLISH received for packet id %u.\n\n",
+                   pxDeserializedInfo->packetIdentifier );
+        MQTTPublishInfo_t * pxPublishInfo = pxDeserializedInfo->pPublishInfo;
+        printf("Topic: %.*s\n", pxPublishInfo->topicNameLength, pxPublishInfo->pTopicName );
+        printf("Payload length: %zu\n", pxPublishInfo->payloadLength );
+        // Invoke callback to process the incoming publish
+        // std::vector<uint8_t> payload(
+        //     static_cast<const uint8_t*>(pxPublishInfo->pPayload),
+        //     static_cast<const uint8_t*>(pxPublishInfo->pPayload) + pxPublishInfo->payloadLength);
+        // std::string topic(pxPublishInfo->pTopicName, pxPublishInfo->topicNameLength);
+        // if (edgeBenchClientInstance_ == nullptr) {
+        //     ESP_LOGE(TAG, "EdgeBenchClient instance is null");
+        //     return;
+        // }
+        // edgeBenchClientInstance_->handleMessage(topic, payload);
+    }
+    else
+    {
+        // Handle ACKs
+        switch ( pxPacketInfo->type )
+        {
+            case MQTT_PACKET_TYPE_PUBACK:
+                printf("PUBACK received for packet ID %u.\r\n", pxDeserializedInfo->packetIdentifier );
+                break;
+
+            case MQTT_PACKET_TYPE_SUBACK:
+                printf("SUBACK received for packet ID %u.\r\n", pxDeserializedInfo->packetIdentifier );
+                break;
+            default:
+                printf("Received unhandled packet type: %02X\r\n", pxPacketInfo->type );
+                break;
+        }
+    }
+}
+
+
 // Connect to MQTT broker
-bool connectToMqttBroker(const char* broker_url, int port, MQTTEventCallback_t userCallback) {
+bool connectToMqttBroker(const char* broker_url, int port) {
     printf("Connecting to MQTT broker at %s:%d...\r\n", broker_url, port);
 
     // Establish TCP connection via coralmicro network API
@@ -48,50 +113,44 @@ bool connectToMqttBroker(const char* broker_url, int port, MQTTEventCallback_t u
         printf( "SocketClient failed to connect to %s:%d\r\n", broker_url, port );
         return false;
     }
-    networkContext.socketFd = sockfd;
+    networkContext = {
+        .socketFd = sockfd
+    };
 
-    // Setup transport interface
-    mqttTransport.pNetworkContext = &networkContext;
-    mqttTransport.send = ( TransportSend_t ) transportSend;
-    mqttTransport.recv = ( TransportRecv_t ) transportRecv;
+    static TransportInterface_t mqttTransport = TransportInterface_t{
+        .recv = ( TransportRecv_t ) transportRecv,
+        .send = ( TransportSend_t ) transportSend,
+        .pNetworkContext = &networkContext,
+    };
 
     // Initialize MQTT
-    if( MQTT_Init( &mqttContext,
+    auto initStatus = MQTT_Init( &mqttContext,
                    &mqttTransport,
                    prvGetTimeMs,
-                   userCallback,
-                   &mqttBuffer ) != MQTTSuccess )
-    {
-        printf("MQTT_Init failed\r\n");
+                   mqtt_event_handler,
+                   &mqttBuffer ) ;
+    if (initStatus != MQTTSuccess) {
+        printf("MQTT_Init failed with status %d\r\n", initStatus);
         return false;
     }
-
-    if (MQTT_InitStatefulQoS(&mqttContext,
-                        outgoingPublishRecords,
-                        MQTT_MAX_PUBLISH_RECORDS,
-                        incomingPublishRecords,
-                        MQTT_MAX_PUBLISH_RECORDS) != MQTTSuccess)
-    {
-        printf("MQTT_InitStatefulQoS failed\r\n");
-        return false;
-    }
+    printf("MQTT_Init successful\r\n");
 
     // MQTT Connect info
-    auto connectInfo = MQTTConnectInfo_t{
+    static MQTTConnectInfo_t connectInfo = MQTTConnectInfo_t{
         .cleanSession = true,
         .keepAliveSeconds = MQTT_KEEP_ALIVE_SECONDS,
         .pClientIdentifier = MQTT_CLIENT_IDENTIFIER,
         .clientIdentifierLength = (uint16_t)strlen(MQTT_CLIENT_IDENTIFIER),
         .pUserName = NULL,
         .userNameLength = 0,
-        .pPassword = NULL, // Replace with your MQTT password
+        .pPassword = NULL,
         .passwordLength = 0,
     };
 
-    bool sessionPresent = false;
+    static bool sessionPresent = false;
 
     // Send CONNECT
-    MQTTStatus_t connectStatus = MQTT_Connect( &mqttContext,
+    auto connectStatus = MQTT_Connect( &mqttContext,
                       &connectInfo,
                       NULL,
                       MQTT_CONNECT_TIMEOUT_MS,
@@ -109,7 +168,7 @@ bool connectToMqttBroker(const char* broker_url, int port, MQTTEventCallback_t u
 // Disconnect from MQTT broker
 bool disconnectFromMqttBroker()
 {
-    printf("Disconnecting from MQTT broker at socket %d...\r\n", networkContext.socketFd);
+    printf("Disconnecting from MQTT broker...\r\n");
 
     /* Send MQTT DISCONNECT */
     MQTTStatus_t mqttStatus = MQTT_Disconnect(&mqttContext);
@@ -150,13 +209,6 @@ bool subscribeToMqttTopic(const char* topic, MQTTQoS_t qos)
 
     printf("MQTT_Subscribe sent for topic %s (packet id %u)\r\n", topic, packetId);
 
-    // Process the MQTT loop to ensure subscription is acknowledged
-    MQTTStatus_t loopStatus = processMqttLoopWithTimeout(MQTT_PROCESS_LOOP_TIMEOUT_MS);
-    if (loopStatus != MQTTSuccess)
-    {
-        printf("MQTT_ProcessLoop failed after subscribing to topic %s with status %d\r\n", topic, loopStatus);
-        return false;
-    }
     return true;
 }
 
@@ -185,30 +237,18 @@ bool publishMqttMessage (const char* topic, const uint8_t* payload, size_t paylo
     return true;
 }
 
-MQTTStatus_t processMqttLoopWithTimeout(uint32_t ulTimeoutMs )
+void processMqttLoop(void * pvParameters)
 {
-    uint32_t ulMqttProcessLoopTimeoutTime;
-    uint32_t ulCurrentTime;
-
-    MQTTStatus_t eMqttStatus = MQTTSuccess;
-
-    ulCurrentTime = mqttContext.getTime();
-    ulMqttProcessLoopTimeoutTime = ulCurrentTime + ulTimeoutMs;
-
-    /* Call MQTT_ProcessLoop multiple times a timeout happens, or
-     * MQTT_ProcessLoop fails. */
-    while( ( ulCurrentTime < ulMqttProcessLoopTimeoutTime ) &&
-           ( eMqttStatus == MQTTSuccess || eMqttStatus == MQTTNeedMoreBytes ) )
+    printf("Starting MQTT_ProcessLoop...\r\n");
+    bool continueProcessing = true;
+    while(continueProcessing)
     {
-        printf("Calling MQTT_ProcessLoop...\r\n");
-        eMqttStatus = MQTT_ProcessLoop(&mqttContext);
-        ulCurrentTime = mqttContext.getTime();
+        auto processLoopStatus = MQTT_ProcessLoop(&mqttContext, 100);
+        continueProcessing = processLoopStatus == MQTTSuccess;
+        //vTaskDelay(pdMS_TO_TICKS(50));
+        if (!continueProcessing)
+        {
+            printf("MQTT_ProcessLoop failed with status %d\r\n", processLoopStatus);
+        }
     }
-
-    if( eMqttStatus == MQTTNeedMoreBytes )
-    {
-        eMqttStatus = MQTTSuccess;
-    }
-
-    return eMqttStatus;
 }
