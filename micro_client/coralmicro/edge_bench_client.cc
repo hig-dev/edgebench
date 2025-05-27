@@ -265,18 +265,7 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
     }
     else if (topic == topic_.INPUT_ACCURACY())
     {
-        xTaskCreate(
-            [](void *arg)
-            {
-                auto self = static_cast<EdgeBenchClient *>(arg);
-                self->startAccuracyTest();
-                vTaskDelete(nullptr);
-            },
-            "AccuracyTest",
-            4 * 1024,
-            this,
-            1,
-            nullptr);
+        startAccuracyTest();
     }
     else if (topic == topic_.CMD())
     {
@@ -289,18 +278,7 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
         Command cmd = static_cast<Command>(payload[0]);
         if (cmd == Command::START_LATENCY_TEST)
         {
-            xTaskCreate(
-                [](void *arg)
-                {
-                    auto self = static_cast<EdgeBenchClient *>(arg);
-                    self->startLatencyTest();
-                    vTaskDelete(nullptr);
-                },
-                "LatencyTest",
-                4 * 1024,
-                this,
-                1,
-                nullptr);
+            startLatencyTest();
         }
         else if (cmd == Command::STOP)
         {
@@ -363,9 +341,11 @@ void EdgeBenchClient::run()
     subscribeToTopics();
     vTaskDelay(100 / portTICK_PERIOD_MS);
     sendStatus(ClientStatus::STARTED);
-    while (!quit_)
+    int yieldRc = 0;
+    while (!quit_ && yieldRc >= 0)
     {
-        mqttClient_->yield(100);
+        yieldRc = mqttClient_->yield(10000);
     }
+    ESP_LOGI(TAG, "EdgeBenchClient run completed, yieldRc: %d, quit: %d", yieldRc, quit_);
     disconnect();
 }
