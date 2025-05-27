@@ -14,7 +14,7 @@ include_directories(coralmicro)
 add_subdirectory(coralmicro)
 
 # Include coreMQTT paths
-include(coralmicro/third_party/nxp/rt1176-sdk/rtos/freertos/libraries/coreMQTT/mqttFilePaths.cmake)
+include(coreMQTT/mqttFilePaths.cmake)
 
 # Include coreMQTT headers
 include_directories(${MQTT_INCLUDE_PUBLIC_DIRS})

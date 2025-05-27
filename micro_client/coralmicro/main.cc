@@ -52,6 +52,8 @@ extern "C" void app_main(void *param)
     return;
   }
   auto topic = Topic("coralmicro");
-  subscribeToMqttTopic(topic.CONFIG_MODE().c_str(),       MQTTQoS0);
+  subscribeToMqttTopic(topic.CONFIG_ITERATIONS().c_str(), MQTTQoS1);
+  uint8_t payload[4] = "123";
+  publishMqttMessage(topic.CONFIG_ITERATIONS().c_str(), payload, 4, MQTTQoS1);
   processMqttLoop(nullptr);
 }
