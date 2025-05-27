@@ -106,6 +106,8 @@ class EdgeBenchManager:
         with open(model_path, "rb") as f:
             model_bytes = f.read()
         self.logger.log(f"Model size: {len(model_bytes)} bytes")
+        # limit model bytes to 1KB
+        model_bytes = model_bytes[:1024]
         self.client.publish(self.topic.MODEL(), model_bytes, qos=1)
 
     def send_input(self, model_path: str, input_data: np.ndarray, topic: str):

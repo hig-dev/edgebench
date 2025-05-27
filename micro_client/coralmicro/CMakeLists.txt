@@ -18,6 +18,7 @@ include_directories(pahomqtt/MQTTClient/src)
 
 add_executable_m7(coralmicro-app
         main.cc
+        edge_bench_client.cc
         pahomqtt/MQTTPacket/src/MQTTConnectClient.c
         pahomqtt/MQTTPacket/src/MQTTDeserializePublish.c
         pahomqtt/MQTTPacket/src/MQTTFormat.c

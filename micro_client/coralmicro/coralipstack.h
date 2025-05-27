@@ -1,18 +1,20 @@
 #if !defined(CORALIPSTACK_H)
 #define CORALIPSTACK_H
 
+#include "third_party/freertos_kernel/include/FreeRTOS.h"
+#include "third_party/freertos_kernel/include/task.h"
 #include "coralmicro/libs/base/network.h"
 
 class CoralIPStack
 {
 public:
-    CoralIPStack(int sockfd)
+    CoralIPStack()
     {
-        sockfd_ = sockfd;
+        sockfd_ = -1;
         open = false;
     }
 
-    int connect(char *hostname, int port)
+    int connect(const char *hostname, int port)
     {
         if (open)
         {
@@ -22,11 +24,9 @@ public:
         sockfd_ = coralmicro::SocketClient(hostname, port);
         if (sockfd_ < 0)
         {
-            printf("SocketClient failed to connect to %s:%d\r\n", hostname, port);
             return -1;
         }
-        
-        printf("SocketClient connected to %s:%d\r\n", hostname, port);
+        open = true;
         return sockfd_;
     }
 
@@ -35,6 +35,11 @@ public:
     */
     int read(unsigned char *buffer, int len, int timeout)
     {
+        if (!open || sockfd_ < 0)
+        {
+            printf("SocketClient not connected\r\n");
+            return -1; // not connected
+        }
         int interval = 10;  // all times are in milliseconds
 		int total = 0;
 
@@ -74,6 +79,11 @@ public:
 
     int write(unsigned char *buffer, int len, int timeout)
     {
+        if (!open || sockfd_ < 0)
+        {
+            printf("SocketClient not connected\r\n");
+            return -1; // not connected
+        }
         coralmicro::IOStatus status = coralmicro::WriteBytes( sockfd_, buffer, len );
         switch (status)
         {
@@ -93,6 +103,11 @@ public:
     void disconnect()
     {
         open = false;
+        if (sockfd_ < 0)
+        {
+            printf("SocketClient already disconnected\r\n");
+            return;
+        }
         coralmicro::SocketClose(sockfd_);
     }
 

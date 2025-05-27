@@ -4,12 +4,21 @@
 #include <string>
 #include <vector>
 #include "../shared/mqtt_topic.h"
-#include "mqtt.h"
+#include "MQTTClient.h"
+#include "coralipstack.h"
+#include "coraltimer.h"
 //#include "tensorflow/lite/micro/micro_interpreter.h"
 
 struct MqttMessage {
     std::string     topic;
     std::vector<uint8_t> payload;
+};
+
+struct DummyInterpreter {
+    // Dummy interpreter for demonstration purposes
+    void Invoke() {
+        // Simulate model inference
+    }
 };
 
 
@@ -29,16 +38,22 @@ private:
     void subscribeToTopics();
     void startLatencyTest();
     void startAccuracyTest();
-
+    int publishMQTTMessage(const std::string &topic,
+                                 const uint8_t *payload,
+                                 size_t payload_len,
+                                 MQTT::QoS qos = MQTT::QOS1);
     std::string                          device_id_;
     std::string                          broker_host_;
     int                                  broker_port_;
     Topic                                topic_;
+    CoralIPStack                         ipstack_{};
+    MQTT::Client<CoralIPStack, CoralTimer, 197632, 6>* mqttClient_{nullptr};
     int                                  iterations_{0};
     TestMode                             mode_{TestMode::NONE};
     int                                  model_size_{0};
     size_t                               model_input_size_{0};
     bool                                 latency_input_ready_{false};
+    DummyInterpreter*                    interpreter_{nullptr}; //tflite::MicroInterpreter
     //tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
     int8_t*                              output_tensor_{nullptr};
@@ -47,7 +62,5 @@ private:
     bool                                 sent_ready_for_task_{false};
     bool                                 quit_{false};
 };
-
-static EdgeBenchClient* edgeBenchClientInstance_ = nullptr;
 
 #endif // EDGE_BENCH_CLIENT_H
