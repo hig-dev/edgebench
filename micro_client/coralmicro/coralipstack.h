@@ -36,7 +36,7 @@ public:
     int read(unsigned char *buffer, int len, int timeout)
     {
         int interval = 10;  // all times are in milliseconds
-		int total = 0, rc = -1;
+		int total = 0;
 
 		if (timeout < 30)
         {
@@ -54,21 +54,22 @@ public:
             switch (ioStatus)
             {
                 case coralmicro::IOStatus::kOk:
-                    rc = len; // all bytes read
+                    return len; // all bytes read
                     break;
                 case coralmicro::IOStatus::kEof:
                     printf("SocketClient EOF\r\n");
-                    rc = -1;
-                    break;
+                    return -1; // EOF means no more data to read
                 case coralmicro::IOStatus::kError:
                     printf("SocketClient Error\r\n");
-                    rc = -1;
-                    break;
+                    return -1; // error reading from socket
                 default:
-                    rc = -1;
+                    printf("SocketClient Unknown IOStatus\r\n");
+                    return -1; // unknown status
             }
         }
-		return rc;
+		else {
+            return 0; // no data available due to timeout
+        }
     }
 
     int write(unsigned char *buffer, int len, int timeout)

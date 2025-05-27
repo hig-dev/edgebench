@@ -87,36 +87,36 @@ extern "C" void app_main(void *param)
     printf("rc from MQTT subscribe is %d\n", rc);
   printf("Subscribed to %s\r\n", topic);
 
-  char buf[4] = {0x01, 0x02, 0x03, 0x04};
-  MQTT::Message message;
-  message.qos = MQTT::QOS1;
-  message.retained = false;
-  message.dup = false;
-  message.payload = (void *)buf;
-  message.payloadlen = 4;
-  rc = client.publish(topic, message);
-  if (rc != 0)
-    printf("rc from MQTT publish is %d\r\n", rc);
-  printf("MQTT published status\r\n");
+  // char buf[4] = {0x01, 0x02, 0x03, 0x04};
+  // MQTT::Message message;
+  // message.qos = MQTT::QOS1;
+  // message.retained = false;
+  // message.dup = false;
+  // message.payload = (void *)buf;
+  // message.payloadlen = 4;
+  // rc = client.publish(topic, message);
+  // if (rc != 0)
+  //   printf("rc from MQTT publish is %d\r\n", rc);
+  // printf("MQTT published status\r\n");
 
   int counter = 0;
   while (true)
   {
-    if (counter % 100 == 0)
-    {
-      printf("Counter: %d\r\n", counter);
-        char buf2[4] = {0x01, 0x03, 0x03, 0x04};
-        MQTT::Message message2;
-        message2.qos = MQTT::QOS1;
-        message2.retained = false;
-        message2.dup = false;
-        message2.payload = (void *)buf2;
-        message2.payloadlen = 4;
-      rc = client.publish(topic, message2);
-      if (rc != 0)
-        printf("rc from MQTT publish is %d\r\n", rc);
-      printf("MQTT published status\r\n");
-    }
+    // if (counter % 100 == 0)
+    // {
+    //   printf("Counter: %d\r\n", counter);
+    //     char buf2[4] = {0x01, 0x03, 0x03, 0x04};
+    //     MQTT::Message message2;
+    //     message2.qos = MQTT::QOS1;
+    //     message2.retained = false;
+    //     message2.dup = false;
+    //     message2.payload = (void *)buf2;
+    //     message2.payloadlen = 4;
+    //   rc = client.publish(topic, message2);
+    //   if (rc != 0)
+    //     printf("rc from MQTT publish is %d\r\n", rc);
+    //   printf("MQTT published status\r\n");
+    // }
     client.yield(100);
     counter++;
   }
