@@ -5,10 +5,20 @@
 #include <chrono>
 #include <stdio.h>
 #include <stdarg.h>
+#include <set>
 
 static const char *TAG = "EdgeBenchClient";
 
-static EdgeBenchClient *g_edgeBenchClient = nullptr;
+static constexpr int kMaxModelSize = 4488760;  // 4.5 MB
+static constexpr int kArenaSize = 3200 * 1024; // 3.2 MB
+
+static EdgeBenchClient *s_edgeBenchClient = nullptr;
+static std::vector<uint8_t> s_model_buffer = std::vector<uint8_t>(kMaxModelSize);
+static int s_model_size = 0;
+static std::set<int> s_received_model_chunk_ids = std::set<int>();
+static int s_input_size = 0;
+static std::set<int> s_received_input_chunk_ids = std::set<int>();
+
 
 void ESP_LOGI(const char *tag, const char *format, ...)
 {
@@ -32,7 +42,7 @@ void ESP_LOGE(const char *tag, const char *format, ...)
 
 void messageArrivedHandler(MQTT::MessageData &md)
 {
-    if (g_edgeBenchClient == nullptr)
+    if (s_edgeBenchClient == nullptr)
     {
         ESP_LOGE(TAG, "g_edgeBenchClient is null");
         return;
@@ -40,9 +50,9 @@ void messageArrivedHandler(MQTT::MessageData &md)
 
     MQTT::Message &message = md.message;
     std::string topic(md.topicName.lenstring.data, md.topicName.lenstring.len);
-    auto payload = static_cast<uint8_t*>(message.payload);
+    auto payload = static_cast<uint8_t *>(message.payload);
     std::vector<uint8_t> payloadVec(payload, payload + message.payloadlen);
-    g_edgeBenchClient->handleMessage(topic, std::move(payloadVec));
+    s_edgeBenchClient->handleMessage(topic, std::move(payloadVec));
 }
 
 EdgeBenchClient::EdgeBenchClient(const std::string &device_id,
@@ -53,7 +63,7 @@ EdgeBenchClient::EdgeBenchClient(const std::string &device_id,
       broker_port_(broker_port),
       topic_(device_id)
 {
-    g_edgeBenchClient = this;
+    s_edgeBenchClient = this;
     int sockfd = ipstack_.connect(broker_host_.c_str(), broker_port_);
     if (sockfd < 0)
     {
@@ -62,14 +72,14 @@ EdgeBenchClient::EdgeBenchClient(const std::string &device_id,
         return;
     }
     ESP_LOGI(TAG, "SocketClient connected to %s:%d", broker_host_.c_str(), broker_port_);
-    mqttClient_ = new MQTT::Client<CoralIPStack, CoralTimer, 197632, 6>(ipstack_);
+    mqttClient_ = new MQTT::Client<CoralIPStack, CoralTimer, kMqttMaxPayloadSize, 6>(ipstack_);
 }
 
 void EdgeBenchClient::connect()
 {
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
     data.MQTTVersion = 4;
-    data.clientID.cstring = (char *) device_id_.c_str();
+    data.clientID.cstring = (char *)device_id_.c_str();
     auto rc = mqttClient_->connect(data);
     if (rc != 0)
     {
@@ -87,9 +97,9 @@ void EdgeBenchClient::disconnect()
 }
 
 int EdgeBenchClient::publishMQTTMessage(const std::string &topic,
-                                         const uint8_t *payload,
-                                         size_t payload_len,
-                                         MQTT::QoS qos)
+                                        const uint8_t *payload,
+                                        size_t payload_len,
+                                        MQTT::QoS qos)
 {
     MQTT::Message message;
     message.qos = qos;
@@ -151,8 +161,8 @@ void EdgeBenchClient::startAccuracyTest()
     // size_t out_bytes = interpreter_->output_tensor(0)->bytes;
     size_t out_bytes = 0;
     publishMQTTMessage(topic_.RESULT_ACCURACY(),
-                        reinterpret_cast<uint8_t *>(output_tensor_),
-                        out_bytes);
+                       reinterpret_cast<uint8_t *>(output_tensor_),
+                       out_bytes);
     ESP_LOGI(TAG, "Accuracy result sent");
 }
 
@@ -165,8 +175,7 @@ void EdgeBenchClient::subscribeToTopics()
         mqttClient_->subscribe(topic_.MODEL().c_str(), MQTT::QOS1, messageArrivedHandler),
         mqttClient_->subscribe(topic_.INPUT_LATENCY().c_str(), MQTT::QOS1, messageArrivedHandler),
         mqttClient_->subscribe(topic_.INPUT_ACCURACY().c_str(), MQTT::QOS1, messageArrivedHandler),
-        mqttClient_->subscribe(topic_.CMD().c_str(), MQTT::QOS1, messageArrivedHandler)
-    };
+        mqttClient_->subscribe(topic_.CMD().c_str(), MQTT::QOS1, messageArrivedHandler)};
 
     for (int i = 0; i < 6; ++i)
     {
@@ -214,54 +223,126 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
     }
     else if (topic == topic_.MODEL())
     {
-        ESP_LOGE(TAG, "Model data received, but model loading is not implemented in this example");
-        interpreter_ = new DummyInterpreter(); // Placeholder for actual interpreter
-        // if (model_buffer_ == nullptr) {
-        //     ESP_LOGE(TAG, "Model buffer is empty");
-        //     quit_ = true;
-        //     return;
-        // }
-        // const tflite::Model* model = tflite::GetModel(model_buffer_);
-        // if (model->version() != TFLITE_SCHEMA_VERSION) {
-        //     ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
-        //     quit_ = true;
-        //     return;
-        // }
+        ESP_LOGE(TAG, "Model chunk data received");
+        // Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
+        if (payload.size() < 12)
+        {
+            ESP_LOGE(TAG, "Invalid model chunk size");
+            quit_ = true;
+            return;
+        }
+        int total_chunks = (static_cast<int>(payload[0]) << 24) |
+                           (static_cast<int>(payload[1]) << 16) |
+                           (static_cast<int>(payload[2]) << 8) |
+                           static_cast<int>(payload[3]);
+        int chunk_id = (static_cast<int>(payload[4]) << 24) |
+                       (static_cast<int>(payload[5]) << 16) |
+                       (static_cast<int>(payload[6]) << 8) |
+                       static_cast<int>(payload[7]);
+        int offset = (static_cast<int>(payload[8]) << 24) |
+                      (static_cast<int>(payload[9]) << 16) |
+                      (static_cast<int>(payload[10]) << 8) |
+                      static_cast<int>(payload[11]);
+        ESP_LOGI(TAG, "Write model chunk %d/%d at offset %d", chunk_id, total_chunks, offset);
+        memcpy(s_model_buffer.data() + offset, payload.data() + 12, payload.size() - 12);
+        s_model_size += payload.size() - 12;
+        s_received_model_chunk_ids.insert(chunk_id);
+        
+        if ((int)s_received_model_chunk_ids.size() == total_chunks)
+        {
+            ESP_LOGI(TAG, "All model chunks received (%d bytes)", s_model_size);
+            interpreter_ = new DummyInterpreter(); // Placeholder for actual interpreter
+            input_tensor_ = new int8_t[197632]; // Placeholder for input tensor
+            // if (model_buffer_ == nullptr) {
+            //     ESP_LOGE(TAG, "Model buffer is empty");
+            //     quit_ = true;
+            //     return;
+            // }
+            // const tflite::Model* model = tflite::GetModel(model_buffer_);
+            // if (model->version() != TFLITE_SCHEMA_VERSION) {
+            //     ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
+            //     quit_ = true;
+            //     return;
+            // }
 
-        // auto free_size_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        // ESP_LOGI(TAG, "Free PSRAM size: %d", free_size_psram);
+            // auto free_size_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            // ESP_LOGI(TAG, "Free PSRAM size: %d", free_size_psram);
 
-        // delete interpreter_;
+            // delete interpreter_;
 
-        // if (tensor_arena_ == nullptr) {
-        //     ESP_LOGE(TAG, "Tensor arena not allocated");
-        //     quit_ = true;
-        //     return;
-        // }
-        // if (micro_op_resolver_ == nullptr) {
-        //     ESP_LOGE(TAG, "Micro op resolver not allocated");
-        //     quit_ = true;
-        //     return;
-        // }
-        // interpreter_ = new tflite::MicroInterpreter(model,
-        //                                             *micro_op_resolver_,
-        //                                             tensor_arena_,
-        //                                             kArenaSize);
-        // TfLiteStatus allocate_status = interpreter_->AllocateTensors();
-        // if (allocate_status != kTfLiteOk) {
-        //     ESP_LOGE(TAG, "AllocateTensors() failed");
-        //     quit_ = true;
-        //     return;
-        // }
-        // input_tensor_  = interpreter_->typed_input_tensor<int8_t>(0);
-        // output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
-        // ESP_LOGI(TAG, "Model loaded; tensors allocated");ESP_LOGI(TAG, "Copy input data to tensor");
-        // model_input_size_ = interpreter_->input_tensor(0)->bytes;
+            // if (tensor_arena_ == nullptr) {
+            //     ESP_LOGE(TAG, "Tensor arena not allocated");
+            //     quit_ = true;
+            //     return;
+            // }
+            // if (micro_op_resolver_ == nullptr) {
+            //     ESP_LOGE(TAG, "Micro op resolver not allocated");
+            //     quit_ = true;
+            //     return;
+            // }
+            // interpreter_ = new tflite::MicroInterpreter(model,
+            //                                             *micro_op_resolver_,
+            //                                             tensor_arena_,
+            //                                             kArenaSize);
+            // TfLiteStatus allocate_status = interpreter_->AllocateTensors();
+            // if (allocate_status != kTfLiteOk) {
+            //     ESP_LOGE(TAG, "AllocateTensors() failed");
+            //     quit_ = true;
+            //     return;
+            // }
+            // input_tensor_  = interpreter_->typed_input_tensor<int8_t>(0);
+            // output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
+            // ESP_LOGI(TAG, "Model loaded; tensors allocated");ESP_LOGI(TAG, "Copy input data to tensor");
+            // model_input_size_ = interpreter_->input_tensor(0)->bytes;
+        }
+        else
+        {
+            sendStatus(ClientStatus::READY_FOR_CHUNK);
+        }
     }
     else if (topic == topic_.INPUT_LATENCY())
     {
-        ESP_LOGI(TAG, "Input latency data loaded");
-        latency_input_ready_ = true;
+        ESP_LOGI(TAG, "Latency input chunk data received");
+        // Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
+        if (payload.size() < 12)
+        {
+            ESP_LOGE(TAG, "Invalid input chunk size");
+            quit_ = true;
+            return;
+        }
+        int total_chunks = (static_cast<int>(payload[0]) << 24) |
+                           (static_cast<int>(payload[1]) << 16) |
+                           (static_cast<int>(payload[2]) << 8) |
+                           static_cast<int>(payload[3]);
+        int chunk_id = (static_cast<int>(payload[4]) << 24) |
+                       (static_cast<int>(payload[5]) << 16) |
+                       (static_cast<int>(payload[6]) << 8) |
+                       static_cast<int>(payload[7]);
+        int offset = (static_cast<int>(payload[8]) << 24) |
+                      (static_cast<int>(payload[9]) << 16) |
+                      (static_cast<int>(payload[10]) << 8) |
+                      static_cast<int>(payload[11]);
+        ESP_LOGI(TAG, "Write input chunk %d/%d at offset %d", chunk_id, total_chunks, offset);
+        
+        if (input_tensor_ == nullptr)
+        {
+            ESP_LOGE(TAG, "Input tensor is null");
+            quit_ = true;
+            return;
+        }
+
+        memcpy(input_tensor_ + offset, payload.data() + 12, payload.size() - 12);
+        s_input_size += payload.size() - 12;
+        s_received_input_chunk_ids.insert(chunk_id);
+        if ((int)s_received_input_chunk_ids.size() == total_chunks)
+        {
+            ESP_LOGI(TAG, "All input chunks received (%d bytes)", s_input_size);
+            latency_input_ready_ = true;
+        }
+        else
+        {
+            sendStatus(ClientStatus::READY_FOR_CHUNK);
+        }
     }
     else if (topic == topic_.INPUT_ACCURACY())
     {
@@ -295,6 +376,11 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
             mode_ = TestMode::NONE;
             delete interpreter_;
             interpreter_ = nullptr;
+            s_model_buffer.clear();
+            s_model_size = 0;
+            s_received_model_chunk_ids.clear();
+            s_input_size = 0;
+            s_received_input_chunk_ids.clear();
             ESP_LOGI(TAG, "State reset");
             return;
         }
@@ -344,7 +430,7 @@ void EdgeBenchClient::run()
     int yieldRc = 0;
     while (!quit_ && yieldRc >= 0)
     {
-        yieldRc = mqttClient_->yield(10000);
+        yieldRc = mqttClient_->yield(5000);
     }
     ESP_LOGI(TAG, "EdgeBenchClient run completed, yieldRc: %d, quit: %d", yieldRc, quit_);
     disconnect();

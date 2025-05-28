@@ -9,6 +9,8 @@
 #include "coraltimer.h"
 //#include "tensorflow/lite/micro/micro_interpreter.h"
 
+static constexpr int kMqttMaxPayloadSize = 12800;
+
 struct MqttMessage {
     std::string     topic;
     std::vector<uint8_t> payload;
@@ -47,10 +49,9 @@ private:
     int                                  broker_port_;
     Topic                                topic_;
     CoralIPStack                         ipstack_{};
-    MQTT::Client<CoralIPStack, CoralTimer, 197632, 6>* mqttClient_{nullptr};
+    MQTT::Client<CoralIPStack, CoralTimer, kMqttMaxPayloadSize, 6>* mqttClient_{nullptr};
     int                                  iterations_{0};
     TestMode                             mode_{TestMode::NONE};
-    int                                  model_size_{0};
     size_t                               model_input_size_{0};
     bool                                 latency_input_ready_{false};
     DummyInterpreter*                    interpreter_{nullptr}; //tflite::MicroInterpreter

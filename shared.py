@@ -11,9 +11,10 @@ class ClientStatus(IntEnum):
     NONE = 0
     STARTED = 1
     READY_FOR_MODEL = 2
-    READY_FOR_INPUT = 3
-    READY_FOR_TASK = 4
-    DONE = 5
+    READY_FOR_CHUNK = 3
+    READY_FOR_INPUT = 4
+    READY_FOR_TASK = 5
+    DONE = 6
 
 
 class Command(IntEnum):

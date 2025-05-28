@@ -13,6 +13,7 @@ from shared import TestMode, ClientStatus, Command, Topic, Logger
 from typing import Dict
 
 BYTE_ORDER = "big"
+CHUNK_SIZE = 12800 - 64
 
 class EdgeBenchManager:
     def __init__(
@@ -22,6 +23,7 @@ class EdgeBenchManager:
         data_dir: str,
         reports_dir: str,
         skip: bool = False,
+        chunked: bool = False,
         broker_host="127.0.0.1",
         broker_port=1883,
     ):
@@ -30,6 +32,7 @@ class EdgeBenchManager:
         self.data_dir = data_dir
         self.reports_dir = reports_dir
         self.skip = skip
+        self.chunked = chunked
         self.client = mqtt.Client(
             client_id=str(uuid.uuid4()),
             clean_session=True,
@@ -41,7 +44,9 @@ class EdgeBenchManager:
         self.logger = Logger("EdgeBenchManager")
         self.topic = Topic(device_id)
         self.message_queue = queue.Queue()
-        self.latency_input: np.ndarray = np.load(os.path.join(data_dir, "sample_input_nchw.npy"))
+        self.latency_input: np.ndarray = np.load(
+            os.path.join(data_dir, "sample_input_nchw.npy")
+        )
 
         # Get model input details
         self.model_input_details: Dict[str, Dict] = {}
@@ -106,9 +111,28 @@ class EdgeBenchManager:
         with open(model_path, "rb") as f:
             model_bytes = f.read()
         self.logger.log(f"Model size: {len(model_bytes)} bytes")
-        # limit model bytes to 1KB
-        model_bytes = model_bytes[:1024]
-        self.client.publish(self.topic.MODEL(), model_bytes, qos=1)
+        if not self.chunked:
+            self.client.publish(self.topic.MODEL(), model_bytes, qos=1)
+        else:
+            total_chunks = (len(model_bytes) + CHUNK_SIZE - 1) // CHUNK_SIZE
+            self.logger.log(f"Model will be sent in {total_chunks} chunks")
+            for i in range(total_chunks):
+                start = i * CHUNK_SIZE
+                end = min(start + CHUNK_SIZE, len(model_bytes))
+                chunk = model_bytes[start:end]
+                # Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
+                chunk = (
+                    total_chunks.to_bytes(4, byteorder=BYTE_ORDER)
+                    + i.to_bytes(4, byteorder=BYTE_ORDER)
+                    + start.to_bytes(4, byteorder=BYTE_ORDER)
+                    + chunk
+                )
+                self.logger.log(
+                    f"Sending chunk {i + 1}/{total_chunks} (size: {len(chunk)} bytes)"
+                )
+                self.client.publish(self.topic.MODEL(), chunk, qos=1)
+                if i < total_chunks - 1:
+                    self.wait_for_status(ClientStatus.READY_FOR_CHUNK)
 
     def send_input(self, model_path: str, input_data: np.ndarray, topic: str):
         input_details = self.model_input_details[model_path]
@@ -128,7 +152,28 @@ class EdgeBenchManager:
         self.logger.log(
             f"Sending input (shape: {input_data.shape}, dtype: {input_data.dtype}, bytes: {len(input_data_bytes)})"
         )
-        self.client.publish(topic, input_data_bytes, qos=1)
+        if not self.chunked:
+            self.client.publish(topic, input_data_bytes, qos=1)
+        else:
+            total_chunks = (len(input_data_bytes) + CHUNK_SIZE - 1) // CHUNK_SIZE
+            self.logger.log(f"Input will be sent in {total_chunks} chunks")
+            for i in range(total_chunks):
+                start = i * CHUNK_SIZE
+                end = min(start + CHUNK_SIZE, len(input_data_bytes))
+                chunk = input_data_bytes[start:end]
+                # Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
+                chunk = (
+                    total_chunks.to_bytes(4, byteorder=BYTE_ORDER)
+                    + i.to_bytes(4, byteorder=BYTE_ORDER)
+                    + start.to_bytes(4, byteorder=BYTE_ORDER)
+                    + chunk
+                )
+                self.logger.log(
+                    f"Sending input chunk {i + 1}/{total_chunks} (size: {len(chunk)} bytes)"
+                )
+                self.client.publish(topic, chunk, qos=1)
+                if i < total_chunks - 1:
+                    self.wait_for_status(ClientStatus.READY_FOR_CHUNK)
 
     def send_command(self, command: Command):
         self.logger.log(f"Sending command {command.name}")
@@ -151,7 +196,9 @@ class EdgeBenchManager:
                 == status
             ):
                 ready = True
-                self.logger.log(f'Client status for "{self.device_id}" changed to {status.name}')
+                self.logger.log(
+                    f'Client status for "{self.device_id}" changed to {status.name}'
+                )
 
     def run_latency(
         self,
@@ -193,7 +240,7 @@ class EdgeBenchManager:
             if with_energy_measurement:
                 l.log("Ready for energy measurement?")
                 input("Press Enter to continue...")
-            
+
             self.send_command(Command.START_LATENCY_TEST)
             l.log("Waiting for clients to finish...")
 
@@ -353,12 +400,34 @@ def main():
     )
     parser.add_argument("--device", required=True, help="Device ID")
     parser.add_argument("--skip", action="store_true", help="Skips if report exists")
+    parser.add_argument(
+        "--chunked", action="store_true", help="Transfer model in chunks"
+    )
     parser.add_argument("--energy", action="store_true", help="With energy measurement")
-    parser.add_argument("--models-dir", default=os.path.join(os.path.dirname(__file__), "models"), help="Models directory")
-    parser.add_argument("--data-dir", default=os.path.join(os.path.dirname(__file__), "data"), help="Data directory")
-    parser.add_argument("--reports-dir", default=os.path.join(os.path.dirname(__file__), "reports"), help="Reports directory")
-    parser.add_argument("-f", "--filter", nargs="+", help="Model name filters (must contain all)")
-    parser.add_argument("-nf", "--not-filter", nargs="+", help="Model name filters (must not contain any)")
+    parser.add_argument(
+        "--models-dir",
+        default=os.path.join(os.path.dirname(__file__), "models"),
+        help="Models directory",
+    )
+    parser.add_argument(
+        "--data-dir",
+        default=os.path.join(os.path.dirname(__file__), "data"),
+        help="Data directory",
+    )
+    parser.add_argument(
+        "--reports-dir",
+        default=os.path.join(os.path.dirname(__file__), "reports"),
+        help="Reports directory",
+    )
+    parser.add_argument(
+        "-f", "--filter", nargs="+", help="Model name filters (must contain all)"
+    )
+    parser.add_argument(
+        "-nf",
+        "--not-filter",
+        nargs="+",
+        help="Model name filters (must not contain any)",
+    )
     parser.add_argument(
         "-n",
         "--iterations",
@@ -380,31 +449,28 @@ def main():
     if not args.latency and not args.accuracy:
         parser.error("At least one of --latency or --accuracy must be specified")
 
-    model_paths = sorted([
+    model_paths = sorted(
+        [
             os.path.join(args.models_dir, f)
             for f in os.listdir(args.models_dir)
             if f.endswith(".tflite")
-        ])
+        ]
+    )
     print(f"Found {len(model_paths)} models in {args.models_dir}")
     if args.filter:
         model_paths = [
             p
             for p in model_paths
-            if all(
-                filter_str in os.path.basename(p)
-                for filter_str in args.filter
-            )
+            if all(filter_str in os.path.basename(p) for filter_str in args.filter)
         ]
     if args.not_filter:
         model_paths = [
             p
             for p in model_paths
             if not any(
-                filter_str in os.path.basename(p)
-                for filter_str in args.not_filter
+                filter_str in os.path.basename(p) for filter_str in args.not_filter
             )
         ]
-
 
     print(f"Found {len(model_paths)} models after filtering:")
     for model_path in model_paths:
@@ -416,6 +482,7 @@ def main():
         data_dir=args.data_dir,
         reports_dir=args.reports_dir,
         skip=args.skip,
+        chunked=args.chunked,
         broker_host=args.broker_host,
         broker_port=args.broker_port,
     )
@@ -428,9 +495,7 @@ def main():
         )
 
     if args.accuracy:
-        manager.run_accuracy(
-            args.limit, already_connected=args.latency
-        )
+        manager.run_accuracy(args.limit, already_connected=args.latency)
 
 
 if __name__ == "__main__":
