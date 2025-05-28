@@ -2,7 +2,6 @@
 #include "third_party/freertos_kernel/include/FreeRTOS.h"
 #include "third_party/freertos_kernel/include/task.h"
 // #include "heap_manager.h"
-#include <chrono>
 #include <stdio.h>
 #include <stdarg.h>
 #include <set>
@@ -143,14 +142,14 @@ void EdgeBenchClient::sendResult(int elapsed_time_ms)
 void EdgeBenchClient::startLatencyTest()
 {
     ESP_LOGI(TAG, "Running %d iterations...", iterations_);
-    auto t0 = std::chrono::steady_clock::now();
+    auto t0 = xTaskGetTickCount() * portTICK_PERIOD_MS;
     for (int i = 0; i < iterations_; ++i)
     {
         // interpreter_->Invoke();
     }
-    auto t1 = std::chrono::steady_clock::now();
+    auto t1 = xTaskGetTickCount() * portTICK_PERIOD_MS;
     sendStatus(ClientStatus::DONE);
-    int ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    int ms = t1 - t0;
     ESP_LOGI(TAG, "Run completed: %d ms", ms);
     sendResult(ms);
 }
