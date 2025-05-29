@@ -51,13 +51,13 @@ void create_op_resolver() {
 #elif DEIT
     auto *micro_op_resolver = new tflite::MicroMutableOpResolver<19>();
     micro_op_resolver->AddAdd();
-    micro_op_resolver->AddBatchMatMul();
+    micro_op_resolver->AddBatchMatMul(); // Not available for coralmicro
     micro_op_resolver->AddConcatenation();
     micro_op_resolver->AddConv2D();
     micro_op_resolver->AddDepthwiseConv2D();
     micro_op_resolver->AddFullyConnected();
     micro_op_resolver->AddGather();
-    micro_op_resolver->AddGelu(); // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
+    micro_op_resolver->AddGelu(); // Not available for coralmicro and esp32
     micro_op_resolver->AddMean();
     micro_op_resolver->AddMul();
     micro_op_resolver->AddPad();
@@ -65,7 +65,7 @@ void create_op_resolver() {
     micro_op_resolver->AddResizeNearestNeighbor();
     micro_op_resolver->AddRsqrt();
     micro_op_resolver->AddSoftmax();
-    micro_op_resolver->AddSquaredDifference();
+    micro_op_resolver->AddSquaredDifference(); // Not available for coralmicro
     micro_op_resolver->AddStridedSlice();
     micro_op_resolver->AddSub();
     micro_op_resolver->AddTranspose();

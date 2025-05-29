@@ -29,15 +29,13 @@ add_executable_m7(coralmicro-app
         pahomqtt/MQTTPacket/src/MQTTSerializePublish.c
         pahomqtt/MQTTPacket/src/MQTTSubscribeClient.c
         pahomqtt/MQTTPacket/src/MQTTUnsubscribeServer.c
-        #mqtt.cc
-        #edge_bench_client.cc
 )
 
 target_compile_definitions(coralmicro-app
     PRIVATE
       MQTTCLIENT_QOS1=1
       CORALMICRO=1
-      EDGETPU=0
+      EDGETPU=1
       MOBILEONE=1
       EFFICIENTVIT=0
       DEIT=0
