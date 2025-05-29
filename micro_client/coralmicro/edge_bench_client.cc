@@ -1,6 +1,9 @@
 #include "edge_bench_client.h"
 #include "third_party/freertos_kernel/include/FreeRTOS.h"
 #include "third_party/freertos_kernel/include/task.h"
+#include "coralmicro/libs/tensorflow/utils.h"
+#include "coralmicro/libs/tpu/edgetpu_manager.h"
+#include "coralmicro/libs/tpu/edgetpu_op.h"
 // #include "heap_manager.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -17,7 +20,7 @@ static int s_model_size = 0;
 static std::set<int> s_received_model_chunk_ids = std::set<int>();
 static int s_input_size = 0;
 static std::set<int> s_received_input_chunk_ids = std::set<int>();
-
+STATIC_TENSOR_ARENA_IN_SDRAM(tensor_arena_, kArenaSize);
 
 void ESP_LOGI(const char *tag, const char *format, ...)
 {
@@ -145,7 +148,7 @@ void EdgeBenchClient::startLatencyTest()
     auto t0 = xTaskGetTickCount() * portTICK_PERIOD_MS;
     for (int i = 0; i < iterations_; ++i)
     {
-        // interpreter_->Invoke();
+        interpreter_->Invoke();
     }
     auto t1 = xTaskGetTickCount() * portTICK_PERIOD_MS;
     sendStatus(ClientStatus::DONE);
@@ -156,13 +159,42 @@ void EdgeBenchClient::startLatencyTest()
 
 void EdgeBenchClient::startAccuracyTest()
 {
-    // interpreter_->Invoke();
-    // size_t out_bytes = interpreter_->output_tensor(0)->bytes;
-    size_t out_bytes = 0;
-    publishMQTTMessage(topic_.RESULT_ACCURACY(),
-                       reinterpret_cast<uint8_t *>(output_tensor_),
-                       out_bytes);
-    ESP_LOGI(TAG, "Accuracy result sent");
+    interpreter_->Invoke();
+    size_t out_bytes = interpreter_->output_tensor(0)->bytes;
+
+    // Send the output result in chunks
+    // Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
+    static constexpr int kChunkSize = 12800-64;
+    int total_chunks = (out_bytes + kChunkSize - 1) / kChunkSize;
+    ESP_LOGI(TAG, "Output size: %d bytes, total chunks: %d", out_bytes, total_chunks);
+    for (int chunk_id = 0; chunk_id < total_chunks; ++chunk_id)
+    {
+        int offset = chunk_id * kChunkSize;
+        int chunk_size = kChunkSize <= out_bytes - offset ? kChunkSize : out_bytes - offset;
+        std::vector<uint8_t> chunk_data(chunk_size + 12);
+        chunk_data[0] = (total_chunks >> 24) & 0xFF;
+        chunk_data[1] = (total_chunks >> 16) & 0xFF;
+        chunk_data[2] = (total_chunks >> 8) & 0xFF;
+        chunk_data[3] = total_chunks & 0xFF;
+        chunk_data[4] = (chunk_id >> 24) & 0xFF;
+        chunk_data[5] = (chunk_id >> 16) & 0xFF;
+        chunk_data[6] = (chunk_id >> 8) & 0xFF;
+        chunk_data[7] = chunk_id & 0xFF;
+        chunk_data[8] = (offset >> 24) & 0xFF;
+        chunk_data[9] = (offset >> 16) & 0xFF;
+        chunk_data[10] = (offset >> 8) & 0xFF;
+        chunk_data[11] = offset & 0xFF;
+
+        memcpy(chunk_data.data() + 12, output_tensor_ + offset, chunk_size);
+        
+        int rc = publishMQTTMessage(topic_.RESULT_ACCURACY(), chunk_data.data(), chunk_data.size());
+        if (rc != 0)
+        {
+            ESP_LOGE(TAG, "Failed to send accuracy result message: %d", rc);
+            return;
+        }
+    }
+    ESP_LOGI(TAG, "Sent accuracy result in %d chunks", total_chunks);
 }
 
 void EdgeBenchClient::subscribeToTopics()
@@ -239,69 +271,68 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
                        (static_cast<int>(payload[6]) << 8) |
                        static_cast<int>(payload[7]);
         int offset = (static_cast<int>(payload[8]) << 24) |
-                      (static_cast<int>(payload[9]) << 16) |
-                      (static_cast<int>(payload[10]) << 8) |
-                      static_cast<int>(payload[11]);
+                     (static_cast<int>(payload[9]) << 16) |
+                     (static_cast<int>(payload[10]) << 8) |
+                     static_cast<int>(payload[11]);
         ESP_LOGI(TAG, "Write model chunk %d/%d at offset %d", chunk_id, total_chunks, offset);
         memcpy(s_model_buffer.data() + offset, payload.data() + 12, payload.size() - 12);
         s_model_size += payload.size() - 12;
         s_received_model_chunk_ids.insert(chunk_id);
-        
+
         if ((int)s_received_model_chunk_ids.size() == total_chunks)
         {
             ESP_LOGI(TAG, "All model chunks received (%d bytes)", s_model_size);
-            interpreter_ = new DummyInterpreter(); // Placeholder for actual interpreter
-            input_tensor_ = new int8_t[197632]; // Placeholder for input tensor
-            // if (model_buffer_ == nullptr) {
-            //     ESP_LOGE(TAG, "Model buffer is empty");
-            //     quit_ = true;
-            //     return;
-            // }
-            // const tflite::Model* model = tflite::GetModel(model_buffer_);
-            // if (model->version() != TFLITE_SCHEMA_VERSION) {
-            //     ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
-            //     quit_ = true;
-            //     return;
-            // }
 
-            // auto free_size_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            // ESP_LOGI(TAG, "Free PSRAM size: %d", free_size_psram);
+            const tflite::Model *model = tflite::GetModel(s_model_buffer.data());
+            if (model->version() != TFLITE_SCHEMA_VERSION)
+            {
+                ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
+                quit_ = true;
+                return;
+            }
 
-            // delete interpreter_;
+            delete interpreter_;
 
-            // if (tensor_arena_ == nullptr) {
-            //     ESP_LOGE(TAG, "Tensor arena not allocated");
-            //     quit_ = true;
-            //     return;
-            // }
-            // if (micro_op_resolver_ == nullptr) {
-            //     ESP_LOGE(TAG, "Micro op resolver not allocated");
-            //     quit_ = true;
-            //     return;
-            // }
-            // interpreter_ = new tflite::MicroInterpreter(model,
-            //                                             *micro_op_resolver_,
-            //                                             tensor_arena_,
-            //                                             kArenaSize);
-            // TfLiteStatus allocate_status = interpreter_->AllocateTensors();
-            // if (allocate_status != kTfLiteOk) {
-            //     ESP_LOGE(TAG, "AllocateTensors() failed");
-            //     quit_ = true;
-            //     return;
-            // }
-            // input_tensor_  = interpreter_->typed_input_tensor<int8_t>(0);
-            // output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
-            // ESP_LOGI(TAG, "Model loaded; tensors allocated");ESP_LOGI(TAG, "Copy input data to tensor");
-            // model_input_size_ = interpreter_->input_tensor(0)->bytes;
+            if (tensor_arena_ == nullptr)
+            {
+                ESP_LOGE(TAG, "Tensor arena not allocated");
+                quit_ = true;
+                return;
+            }
+
+            if (micro_op_resolver_ == nullptr)
+            {
+                ESP_LOGE(TAG, "Micro op resolver not allocated");
+                quit_ = true;
+                return;
+            }
+
+            interpreter_ = new tflite::MicroInterpreter(model,
+                                                        *micro_op_resolver_,
+                                                        tensor_arena_,
+                                                        kArenaSize,
+                                                        &error_reporter_);
+            TfLiteStatus allocate_status = interpreter_->AllocateTensors();
+            if (allocate_status != kTfLiteOk)
+            {
+                ESP_LOGE(TAG, "AllocateTensors() failed");
+                quit_ = true;
+                return;
+            }
+            input_tensor_ = interpreter_->typed_input_tensor<int8_t>(0);
+            output_tensor_ = interpreter_->typed_output_tensor<int8_t>(0);
+            ESP_LOGI(TAG, "Model loaded; tensors allocated");
+            ESP_LOGI(TAG, "Copy input data to tensor");
+            model_input_size_ = interpreter_->input_tensor(0)->bytes;
         }
         else
         {
             sendStatus(ClientStatus::READY_FOR_CHUNK);
         }
     }
-    else if (topic == topic_.INPUT_LATENCY())
+    else if (topic == topic_.INPUT_LATENCY() || topic == topic_.INPUT_ACCURACY())
     {
-        ESP_LOGI(TAG, "Latency input chunk data received");
+        ESP_LOGI(TAG, "Input chunk data received");
         // Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
         if (payload.size() < 12)
         {
@@ -318,11 +349,11 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
                        (static_cast<int>(payload[6]) << 8) |
                        static_cast<int>(payload[7]);
         int offset = (static_cast<int>(payload[8]) << 24) |
-                      (static_cast<int>(payload[9]) << 16) |
-                      (static_cast<int>(payload[10]) << 8) |
-                      static_cast<int>(payload[11]);
+                     (static_cast<int>(payload[9]) << 16) |
+                     (static_cast<int>(payload[10]) << 8) |
+                     static_cast<int>(payload[11]);
         ESP_LOGI(TAG, "Write input chunk %d/%d at offset %d", chunk_id, total_chunks, offset);
-        
+
         if (input_tensor_ == nullptr)
         {
             ESP_LOGE(TAG, "Input tensor is null");
@@ -336,16 +367,28 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
         if ((int)s_received_input_chunk_ids.size() == total_chunks)
         {
             ESP_LOGI(TAG, "All input chunks received (%d bytes)", s_input_size);
-            latency_input_ready_ = true;
+            if (s_input_size != (int)model_input_size_) {
+                ESP_LOGE(TAG, "Invalid input data size, expected %zu, got %zu",
+                        model_input_size_,
+                        s_input_size);
+                quit_ = true;
+                return;
+            }
+            s_input_size = 0;
+            s_received_input_chunk_ids.clear();
+            if (topic == topic_.INPUT_LATENCY())
+            {
+                latency_input_ready_ = true;
+            }
+            else if (topic == topic_.INPUT_ACCURACY())
+            {
+                startAccuracyTest();
+            }
         }
         else
         {
             sendStatus(ClientStatus::READY_FOR_CHUNK);
         }
-    }
-    else if (topic == topic_.INPUT_ACCURACY())
-    {
-        startAccuracyTest();
     }
     else if (topic == topic_.CMD())
     {
@@ -420,6 +463,16 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
 void EdgeBenchClient::run()
 {
     ESP_LOGI(TAG, "Starting EdgeBenchClient for device %s", device_id_.c_str());
+    auto tpu_context = coralmicro::EdgeTpuManager::GetSingleton()->OpenDevice();
+    if (!tpu_context)
+    {
+        ESP_LOGE(TAG, "Failed to open Edge TPU device");
+        return;
+    }
+
+    micro_op_resolver_ = new tflite::MicroMutableOpResolver<1>();
+    micro_op_resolver_->AddCustom(coralmicro::kCustomOp, coralmicro::RegisterCustomOp());
+
     connect();
     ESP_LOGI(TAG, "Connected as %s", device_id_.c_str());
     vTaskDelay(100 / portTICK_PERIOD_MS);

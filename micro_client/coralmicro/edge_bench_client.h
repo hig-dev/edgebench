@@ -7,20 +7,15 @@
 #include "MQTTClient.h"
 #include "coralipstack.h"
 #include "coraltimer.h"
-//#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "third_party/tflite-micro/tensorflow/lite/micro/micro_interpreter.h"
+#include "third_party/tflite-micro/tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "third_party/tflite-micro/tensorflow/lite/micro/micro_error_reporter.h"
 
 static constexpr int kMqttMaxPayloadSize = 12800;
 
 struct MqttMessage {
     std::string     topic;
     std::vector<uint8_t> payload;
-};
-
-struct DummyInterpreter {
-    // Dummy interpreter for demonstration purposes
-    void Invoke() {
-        // Simulate model inference
-    }
 };
 
 
@@ -54,8 +49,9 @@ private:
     TestMode                             mode_{TestMode::NONE};
     size_t                               model_input_size_{0};
     bool                                 latency_input_ready_{false};
-    DummyInterpreter*                    interpreter_{nullptr}; //tflite::MicroInterpreter
-    //tflite::MicroInterpreter*            interpreter_{nullptr};
+    tflite::MicroErrorReporter           error_reporter_{};
+    tflite::MicroMutableOpResolver<1>*   micro_op_resolver_{nullptr};
+    tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
     int8_t*                              output_tensor_{nullptr};
     bool                                 sent_ready_for_model_{false};

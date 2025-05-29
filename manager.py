@@ -354,17 +354,56 @@ class EdgeBenchManager:
                 input_data = np.expand_dims(input_data, axis=0)
                 self.send_input(model_path, input_data, t.INPUT_ACCURACY())
                 result = None
+                output_shape = self.model_output_details[model_path]["shape"]
+                output_dtype = self.model_output_details[model_path]["dtype"]
+                output_bytes_length = np.prod(output_shape) * np.dtype(output_dtype).itemsize
+                full_payload = bytearray(output_bytes_length)
+                reveived_chunk_ids = set()
+                received_bytes = 0
+                total_chunks = float('inf')
                 while result is None:
                     message = self.wait_for_message()
                     if message and message.topic == t.RESULT_ACCURACY():
+                        if not self.chunked:
+                            full_payload = message.payload
+                        else:
+                            # Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
+                            chunk = message.payload
+                            total_chunks = int.from_bytes(
+                                chunk[:4], byteorder=BYTE_ORDER
+                            )
+                            chunk_id = int.from_bytes(
+                                chunk[4:8], byteorder=BYTE_ORDER
+                            )
+                            offset = int.from_bytes(
+                                chunk[8:12], byteorder=BYTE_ORDER
+                            )
+                            print(f"Received accuracy result chunk {chunk_id + 1}/{total_chunks}")
+                            data_chunk = chunk[12:]
+                            received_bytes += len(data_chunk)
+                            if received_bytes > output_bytes_length:
+                                raise ValueError(
+                                    f"Received more bytes ({received_bytes}) than expected ({output_bytes_length})"
+                                )
+                            full_payload[offset:offset + len(data_chunk)] = data_chunk
+                            reveived_chunk_ids.add(chunk_id)
+                            if len(reveived_chunk_ids) < total_chunks:
+                                l.log(
+                                    f"Waiting for more chunks ({len(reveived_chunk_ids)}/{total_chunks})"
+                                )
+                                continue
+                        if self.chunked and received_bytes != output_bytes_length:
+                            raise ValueError(
+                                f"Received {received_bytes} output bytes, expected {output_bytes_length} bytes"
+                            )  
                         result = np.frombuffer(
-                            message.payload,
+                            full_payload,
                             dtype=self.model_output_details[model_path]["dtype"],
                         ).reshape(self.model_output_details[model_path]["shape"])
                         l.log(
                             f"Received result for input {index + 1}/{test_data_length}"
                         )
-                        pck_evaluator.process(result)
+                pck_evaluator.process(result)
 
             pck_metrics = pck_evaluator.evaluate()
             accuracy_test_report = {
