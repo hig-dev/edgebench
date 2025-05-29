@@ -1,26 +1,23 @@
 #include "edge_bench_client.h"
+#include "tensorflow_config.h"
 #include "third_party/freertos_kernel/include/FreeRTOS.h"
 #include "third_party/freertos_kernel/include/task.h"
 #include "coralmicro/libs/tensorflow/utils.h"
-#include "coralmicro/libs/tpu/edgetpu_manager.h"
-#include "coralmicro/libs/tpu/edgetpu_op.h"
-// #include "heap_manager.h"
+#include "coralmicro/libs/base/timer.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <set>
 
 static const char *TAG = "EdgeBenchClient";
 
-static constexpr int kMaxModelSize = 4488760;  // 4.5 MB
-static constexpr int kArenaSize = 3200 * 1024; // 3.2 MB
-
 static EdgeBenchClient *s_edgeBenchClient = nullptr;
-static std::vector<uint8_t> s_model_buffer = std::vector<uint8_t>(kMaxModelSize);
 static int s_model_size = 0;
 static std::set<int> s_received_model_chunk_ids = std::set<int>();
 static int s_input_size = 0;
 static std::set<int> s_received_input_chunk_ids = std::set<int>();
+
 STATIC_TENSOR_ARENA_IN_SDRAM(tensor_arena_, kArenaSize);
+STATIC_TENSOR_ARENA_IN_SDRAM(model_buffer_, kModelBufferSize);
 
 void ESP_LOGI(const char *tag, const char *format, ...)
 {
@@ -37,7 +34,7 @@ void ESP_LOGE(const char *tag, const char *format, ...)
     va_list args;
     va_start(args, format);
     printf("[%s] ERROR: ", tag);
-    vfprintf(stderr, format, args);
+    vfprintf(stdout, format, args);
     printf("\r\n");
     va_end(args);
 }
@@ -145,14 +142,20 @@ void EdgeBenchClient::sendResult(int elapsed_time_ms)
 void EdgeBenchClient::startLatencyTest()
 {
     ESP_LOGI(TAG, "Running %d iterations...", iterations_);
-    auto t0 = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    auto t0 = coralmicro::TimerMicros();
     for (int i = 0; i < iterations_; ++i)
     {
-        interpreter_->Invoke();
+        auto result = interpreter_->Invoke();
+        if (result != kTfLiteOk)
+        {
+            ESP_LOGE(TAG, "Interpreter Invoke failed: %d", result);
+            quit_ = true;
+            return;
+        }
     }
-    auto t1 = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    auto t1 = coralmicro::TimerMicros();
     sendStatus(ClientStatus::DONE);
-    int ms = t1 - t0;
+    int ms = (t1 - t0) / 1000;
     ESP_LOGI(TAG, "Run completed: %d ms", ms);
     sendResult(ms);
 }
@@ -254,7 +257,7 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
     }
     else if (topic == topic_.MODEL())
     {
-        ESP_LOGE(TAG, "Model chunk data received");
+        ESP_LOGI(TAG, "Model chunk data received");
         // Chunk format: total_chunks (4 bytes), chunk_id (4 bytes), offset (4 bytes), chunk_data (remaining bytes)
         if (payload.size() < 12)
         {
@@ -275,15 +278,22 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
                      (static_cast<int>(payload[10]) << 8) |
                      static_cast<int>(payload[11]);
         ESP_LOGI(TAG, "Write model chunk %d/%d at offset %d", chunk_id, total_chunks, offset);
-        memcpy(s_model_buffer.data() + offset, payload.data() + 12, payload.size() - 12);
         s_model_size += payload.size() - 12;
         s_received_model_chunk_ids.insert(chunk_id);
 
+        if (s_model_size > kModelBufferSize)
+        {
+            ESP_LOGE(TAG, "Model size exceeds buffer size (%d bytes)", kModelBufferSize);
+            quit_ = true;
+            return;
+        }
+        memcpy(model_buffer_ + offset, payload.data() + 12, payload.size() - 12);
+        
         if ((int)s_received_model_chunk_ids.size() == total_chunks)
         {
             ESP_LOGI(TAG, "All model chunks received (%d bytes)", s_model_size);
 
-            const tflite::Model *model = tflite::GetModel(s_model_buffer.data());
+            const tflite::Model *model = tflite::GetModel(model_buffer_);
             if (model->version() != TFLITE_SCHEMA_VERSION)
             {
                 ESP_LOGE(TAG, "Model schema v%lu not supported", (unsigned long)model->version());
@@ -418,7 +428,6 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
             mode_ = TestMode::NONE;
             delete interpreter_;
             interpreter_ = nullptr;
-            s_model_buffer.clear();
             s_model_size = 0;
             s_received_model_chunk_ids.clear();
             s_input_size = 0;
@@ -463,16 +472,6 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
 void EdgeBenchClient::run()
 {
     ESP_LOGI(TAG, "Starting EdgeBenchClient for device %s", device_id_.c_str());
-    auto tpu_context = coralmicro::EdgeTpuManager::GetSingleton()->OpenDevice();
-    if (!tpu_context)
-    {
-        ESP_LOGE(TAG, "Failed to open Edge TPU device");
-        return;
-    }
-
-    micro_op_resolver_ = new tflite::MicroMutableOpResolver<1>();
-    micro_op_resolver_->AddCustom(coralmicro::kCustomOp, coralmicro::RegisterCustomOp());
-
     connect();
     ESP_LOGI(TAG, "Connected as %s", device_id_.c_str());
     vTaskDelay(100 / portTICK_PERIOD_MS);

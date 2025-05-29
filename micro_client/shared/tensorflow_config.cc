@@ -1,41 +1,54 @@
-#include "heap_manager.h"
-#include "esp_heap_caps.h"
-#include "esp_log.h"
+#include "tensorflow_config.h"
 
-static const char* TAG = "EdgeBenchClient";
-
+#if !CORALMICRO
 uint8_t* tensor_arena_ = nullptr;
 uint8_t* model_buffer_ = nullptr;
+#endif
+
 tflite::MicroOpResolver* micro_op_resolver_ = nullptr;
 
+#if EDGETPU
+std::shared_ptr<coralmicro::EdgeTpuContext> tpu_context_ = nullptr;
+#endif
+
 bool reserve_tensor_arena() {
+    #if ESP32
     tensor_arena_ = (uint8_t*)heap_caps_malloc(
         kArenaSize,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
     );
     if (!tensor_arena_) {
-        ESP_LOGE(TAG, "Failed to allocate tensor arena");
         return false;
     }
-    ESP_LOGI(TAG, "Tensor arena allocated: %d bytes", kArenaSize);
     return true;
+    #elif CORALMICRO
+    return true; // Static allocation in SDRAM
+    #endif
+    return false;
 }
 
 bool reserve_model_buffer() {
+    #if ESP32
     model_buffer_ = (uint8_t*)heap_caps_malloc(
         kModelBufferSize,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
     );
     if (!model_buffer_) {
-        ESP_LOGE(TAG, "Failed to allocate model buffer");
         return false;
     }
-    ESP_LOGI(TAG, "Model buffer allocated: %d bytes", kModelBufferSize);
     return true;
+    #elif CORALMICRO
+    return true; // Static allocation in SDRAM
+    #endif
+    return false;
 }
 
 void create_op_resolver() {
-#if DEIT
+#if EDGETPU
+    auto *micro_op_resolver = new tflite::MicroMutableOpResolver<1>();
+    micro_op_resolver->AddCustom(coralmicro::kCustomOp, coralmicro::RegisterCustomOp());    
+    micro_op_resolver_ = micro_op_resolver;
+#elif DEIT
     auto *micro_op_resolver = new tflite::MicroMutableOpResolver<19>();
     micro_op_resolver->AddAdd();
     micro_op_resolver->AddBatchMatMul();
@@ -44,8 +57,7 @@ void create_op_resolver() {
     micro_op_resolver->AddDepthwiseConv2D();
     micro_op_resolver->AddFullyConnected();
     micro_op_resolver->AddGather();
-    // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
-    //micro_op_resolver->AddGelu();
+    micro_op_resolver->AddGelu(); // GELU is not supported in TensorFlow Lite Micro for ESP32-S3
     micro_op_resolver->AddMean();
     micro_op_resolver->AddMul();
     micro_op_resolver->AddPad();
@@ -90,4 +102,22 @@ void create_op_resolver() {
     micro_op_resolver->AddMean();
     micro_op_resolver_ = micro_op_resolver;
 #endif
+}
+
+TensorflowConfigResult initialize_tensorflow_config() {
+    #if EDGETPU
+    tpu_context_ = coralmicro::EdgeTpuManager::GetSingleton()->OpenDevice(coralmicro::PerformanceMode::kMax);
+    if (!tpu_context_) {
+        return TensorflowConfigResult::EDGE_TPU_INIT_FAILED;
+    }
+    #endif
+    if (!reserve_tensor_arena()) {
+        return TensorflowConfigResult::TENSOR_ARENA_ALLOC_FAILED;
+    }
+
+    if (!reserve_model_buffer()) {
+        return TensorflowConfigResult::MODEL_BUFFER_ALLOC_FAILED;
+    }
+    create_op_resolver();
+    return TensorflowConfigResult::SUCCESS;
 }

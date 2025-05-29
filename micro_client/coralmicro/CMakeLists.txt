@@ -13,12 +13,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 include_directories(coralmicro)
 add_subdirectory(coralmicro)
 
+include_directories(../shared)
 include_directories(pahomqtt/MQTTPacket/src)
 include_directories(pahomqtt/MQTTClient/src)
+
 
 add_executable_m7(coralmicro-app
         main.cc
         edge_bench_client.cc
+        ../shared/tensorflow_config.cc
         pahomqtt/MQTTPacket/src/MQTTConnectClient.c
         pahomqtt/MQTTPacket/src/MQTTDeserializePublish.c
         pahomqtt/MQTTPacket/src/MQTTFormat.c
@@ -33,6 +36,8 @@ add_executable_m7(coralmicro-app
 target_compile_definitions(coralmicro-app
     PRIVATE
       MQTTCLIENT_QOS1=1
+      CORALMICRO=1
+      EDGETPU=1
 )
 
 target_include_directories(coralmicro-app PRIVATE "pahomqtt/MQTTPacket/src" "pahomqtt/MQTTClient/src")

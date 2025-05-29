@@ -16,12 +16,19 @@
 #include "third_party/freertos_kernel/include/task.h"
 #include "coralmicro/libs/base/tasks.h"
 #include "coralmicro/libs/base/wifi.h"
-#include "../shared/wifi_config.h"
-#include "../shared/mqtt_config.h"
+#include "wifi_config.h"
+#include "mqtt_config.h"
+#include "tensorflow_config.h"
 #include "edge_bench_client.h"
 
 extern "C" void app_main(void *param)
 {
+  TensorflowConfigResult tcr = initialize_tensorflow_config();
+  if (tcr != TensorflowConfigResult::SUCCESS)
+  {
+    printf("Failed to initialize TensorFlow config: %d\r\n", static_cast<int>(tcr));
+    return;
+  }
   printf("Attempting to use Wi-Fi...\r\n");
   bool wifiTurnOnSuccess = coralmicro::WiFiTurnOn(true);
   if (!wifiTurnOnSuccess)
