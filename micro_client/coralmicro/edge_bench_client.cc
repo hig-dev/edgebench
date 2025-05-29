@@ -79,6 +79,7 @@ void EdgeBenchClient::connect()
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
     data.MQTTVersion = 4;
     data.clientID.cstring = (char *)device_id_.c_str();
+    data.keepAliveInterval = 3600;
     auto rc = mqttClient_->connect(data);
     if (rc != 0)
     {

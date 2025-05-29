@@ -1,10 +1,6 @@
 #ifndef TENSORFLOW_CONFIG_H
 #define TENSORFLOW_CONFIG_H
 
-#define MOBILEONE 1
-#define EFFICIENTVIT 0
-#define DEIT 0
-
 #include <cstdint>
 
 #if ESP32
@@ -24,7 +20,7 @@ static constexpr int kModelBufferSize = 4488760;
 static constexpr int kArenaSize = 3200 * 1024;
 #elif CORALMICRO
 static constexpr int kModelBufferSize = 16040576;
-static constexpr int kArenaSize = 3200 * 1024;
+static constexpr int kArenaSize = 3403 * 1024;
 #endif
 
 #if !CORALMICRO

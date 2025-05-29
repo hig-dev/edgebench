@@ -37,7 +37,10 @@ target_compile_definitions(coralmicro-app
     PRIVATE
       MQTTCLIENT_QOS1=1
       CORALMICRO=1
-      EDGETPU=1
+      EDGETPU=0
+      MOBILEONE=1
+      EFFICIENTVIT=0
+      DEIT=0
 )
 
 target_include_directories(coralmicro-app PRIVATE "pahomqtt/MQTTPacket/src" "pahomqtt/MQTTClient/src")
