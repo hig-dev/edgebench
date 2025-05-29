@@ -1,6 +1,7 @@
 [submodule "micro_client/coralmicro/coralmicro"]
 	path = micro_client/coralmicro/coralmicro
 	url = https://github.com/google-coral/coralmicro
-[submodule "micro_client/coralmicro/coreMQTT"]
-	path = micro_client/coralmicro/coreMQTT
-	url = https://github.com/FreeRTOS/coreMQTT.git
+[submodule "micro_client/coralmicro/pahomqtt"]
+	path = micro_client/coralmicro/pahomqtt
+	url = https://github.com/eclipse-paho/paho.mqtt.embedded-c.git
+	ignore = dirty

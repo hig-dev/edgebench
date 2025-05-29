@@ -4,8 +4,13 @@
 #include <string>
 #include <vector>
 #include "../shared/mqtt_topic.h"
-#include "mqtt.h"
-//#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "MQTTClient.h"
+#include "coralipstack.h"
+#include "coraltimer.h"
+#include "third_party/tflite-micro/tensorflow/lite/micro/micro_interpreter.h"
+#include "third_party/tflite-micro/tensorflow/lite/micro/micro_error_reporter.h"
+
+static constexpr int kMqttMaxPayloadSize = 12800;
 
 struct MqttMessage {
     std::string     topic;
@@ -29,17 +34,22 @@ private:
     void subscribeToTopics();
     void startLatencyTest();
     void startAccuracyTest();
-
+    int publishMQTTMessage(const std::string &topic,
+                                 const uint8_t *payload,
+                                 size_t payload_len,
+                                 MQTT::QoS qos = MQTT::QOS1);
     std::string                          device_id_;
     std::string                          broker_host_;
     int                                  broker_port_;
     Topic                                topic_;
+    CoralIPStack                         ipstack_{};
+    MQTT::Client<CoralIPStack, CoralTimer, kMqttMaxPayloadSize, 6>* mqttClient_{nullptr};
     int                                  iterations_{0};
     TestMode                             mode_{TestMode::NONE};
-    int                                  model_size_{0};
     size_t                               model_input_size_{0};
     bool                                 latency_input_ready_{false};
-    //tflite::MicroInterpreter*            interpreter_{nullptr};
+    tflite::MicroErrorReporter           error_reporter_{};
+    tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
     int8_t*                              output_tensor_{nullptr};
     bool                                 sent_ready_for_model_{false};
@@ -47,7 +57,5 @@ private:
     bool                                 sent_ready_for_task_{false};
     bool                                 quit_{false};
 };
-
-static EdgeBenchClient* edgeBenchClientInstance_ = nullptr;
 
 #endif // EDGE_BENCH_CLIENT_H

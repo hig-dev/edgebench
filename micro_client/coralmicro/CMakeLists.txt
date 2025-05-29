@@ -13,24 +13,35 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 include_directories(coralmicro)
 add_subdirectory(coralmicro)
 
-# Include coreMQTT paths
-include(coreMQTT/mqttFilePaths.cmake)
+include_directories(../shared)
+include_directories(pahomqtt/MQTTPacket/src)
+include_directories(pahomqtt/MQTTClient/src)
 
-# Include coreMQTT headers
-include_directories(${MQTT_INCLUDE_PUBLIC_DIRS})
 
 add_executable_m7(coralmicro-app
         main.cc
-        mqtt.cc
         edge_bench_client.cc
-        ${MQTT_SOURCES}
-        ${MQTT_SERIALIZER_SOURCES}
+        ../shared/tensorflow_config.cc
+        pahomqtt/MQTTPacket/src/MQTTConnectClient.c
+        pahomqtt/MQTTPacket/src/MQTTDeserializePublish.c
+        pahomqtt/MQTTPacket/src/MQTTFormat.c
+        pahomqtt/MQTTPacket/src/MQTTPacket.c
+        pahomqtt/MQTTPacket/src/MQTTSerializePublish.c
+        pahomqtt/MQTTPacket/src/MQTTSubscribeClient.c
+        pahomqtt/MQTTPacket/src/MQTTUnsubscribeServer.c
 )
 
 target_compile_definitions(coralmicro-app
     PRIVATE
-      MQTT_DO_NOT_USE_CUSTOM_CONFIG
+      MQTTCLIENT_QOS1=1
+      CORALMICRO=1
+      EDGETPU=1
+      MOBILEONE=1
+      EFFICIENTVIT=0
+      DEIT=0
 )
+
+target_include_directories(coralmicro-app PRIVATE "pahomqtt/MQTTPacket/src" "pahomqtt/MQTTClient/src")
 
 target_link_libraries(coralmicro-app
         libs_base-m7_freertos

@@ -16,13 +16,19 @@
 #include "third_party/freertos_kernel/include/task.h"
 #include "coralmicro/libs/base/tasks.h"
 #include "coralmicro/libs/base/wifi.h"
-#include "../shared/wifi_config.h"
-#include "../shared/mqtt_config.h"
-#include "mqtt.h"
-#include "../shared/mqtt_topic.h"
+#include "wifi_config.h"
+#include "mqtt_config.h"
+#include "tensorflow_config.h"
+#include "edge_bench_client.h"
 
 extern "C" void app_main(void *param)
 {
+  TensorflowConfigResult tcr = initialize_tensorflow_config();
+  if (tcr != TensorflowConfigResult::SUCCESS)
+  {
+    printf("Failed to initialize TensorFlow config: %d\r\n", static_cast<int>(tcr));
+    return;
+  }
   printf("Attempting to use Wi-Fi...\r\n");
   bool wifiTurnOnSuccess = coralmicro::WiFiTurnOn(true);
   if (!wifiTurnOnSuccess)
@@ -40,20 +46,10 @@ extern "C" void app_main(void *param)
   }
   printf("Wi-Fi connected\r\n");
 
-  // auto client  = EdgeBenchClient("coralmicro",
-  //                                MQTT_BROKER_HOST,
-  //                                MQTT_BROKER_PORT);
-  // client.run();
+  auto edgeBenchClient = EdgeBenchClient(
+      "coralmicro",
+      MQTT_BROKER_HOST,
+      MQTT_BROKER_PORT);
 
-  bool mqttConnectSuccess = connectToMqttBroker(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
-  if (!mqttConnectSuccess)
-  {
-    printf("Failed to connect to MQTT broker\r\n");
-    return;
-  }
-  auto topic = Topic("coralmicro");
-  subscribeToMqttTopic(topic.CONFIG_ITERATIONS().c_str(), MQTTQoS1);
-  uint8_t payload[4] = "123";
-  publishMqttMessage(topic.CONFIG_ITERATIONS().c_str(), payload, 4, MQTTQoS1);
-  processMqttLoop(nullptr);
+  edgeBenchClient.run();
 }
