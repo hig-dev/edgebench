@@ -4,3 +4,4 @@
 [submodule "micro_client/coralmicro/pahomqtt"]
 	path = micro_client/coralmicro/pahomqtt
 	url = https://github.com/eclipse-paho/paho.mqtt.embedded-c.git
+	ignore = dirty
