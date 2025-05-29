@@ -73,12 +73,12 @@ void create_op_resolver() {
 #elif EFFICIENTVIT
     auto *micro_op_resolver = new tflite::MicroMutableOpResolver<17>();
     micro_op_resolver->AddAdd();
-    //micro_op_resolver->AddBatchMatMul(); // Not available for coralmicro
+    micro_op_resolver->AddBatchMatMul(); // Not available for coralmicro
     micro_op_resolver->AddConcatenation();
     micro_op_resolver->AddConv2D();
     micro_op_resolver->AddDepthwiseConv2D();
     micro_op_resolver->AddDequantize();
-    //micro_op_resolver->AddDiv(); // Not available for coralmicro
+    micro_op_resolver->AddDiv(); // Not available for coralmicro
     micro_op_resolver->AddHardSwish();
     micro_op_resolver->AddMul();
     micro_op_resolver->AddPad();
