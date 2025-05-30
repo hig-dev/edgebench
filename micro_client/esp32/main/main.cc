@@ -21,7 +21,7 @@
 #include "lwip/sys.h"
 #include "sdkconfig.h"
 #include "edge_bench_client.h"
-#include "heap_manager.h"
+#include "tensorflow_config.h"
 
 #define ESP_MAXIMUM_RETRY  10
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
@@ -129,13 +129,12 @@ void wifi_init_sta(void)
 extern "C" void app_main(void* param)
 {
     // Initialize Tensor Arena before everything else
-    if (!reserve_tensor_arena()) {
+    TensorflowConfigResult tcr = initialize_tensorflow_config();
+    if (tcr != TensorflowConfigResult::SUCCESS)
+    {
+        printf("Failed to initialize TensorFlow config: %d\r\n", static_cast<int>(tcr));
         return;
     }
-    if (!reserve_model_buffer()) {
-        return;
-    }
-    create_op_resolver();
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

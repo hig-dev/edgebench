@@ -2,7 +2,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "esp_event.h"
-#include "heap_manager.h"
+#include "tensorflow_config.h"
 
 static const char* TAG = "EdgeBenchClient";
 
@@ -20,7 +20,7 @@ EdgeBenchClient::EdgeBenchClient(const std::string& device_id,
     cfg.broker.address.transport = MQTT_TRANSPORT_OVER_TCP;
     cfg.session.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
     cfg.buffer.size = 193 * 1024;
-    cfg.buffer.out_size = 193 * 1024;
+    cfg.buffer.out_size = 66 * 1024;
     client_ = esp_mqtt_client_init(&cfg);
     esp_mqtt_client_register_event(client_,
                                    MQTT_EVENT_ANY,
@@ -64,7 +64,13 @@ void EdgeBenchClient::startLatencyTest() {
     ESP_LOGI(TAG, "Running %d iterations...", iterations_);
     auto t0 = xTaskGetTickCount() * portTICK_PERIOD_MS;
     for (int i = 0; i < iterations_; ++i) {
-        interpreter_->Invoke();
+        auto result = interpreter_->Invoke();
+        if (result != kTfLiteOk)
+        {
+            ESP_LOGE(TAG, "Interpreter Invoke failed: %d", result);
+            quit_ = true;
+            return;
+        }
     }
     auto t1 = xTaskGetTickCount() * portTICK_PERIOD_MS;
     sendStatus(ClientStatus::DONE);
@@ -80,7 +86,7 @@ void EdgeBenchClient::startAccuracyTest() {
                             topic_.RESULT_ACCURACY().c_str(),
                             reinterpret_cast<const char*>(output_tensor_),
                             out_bytes, 1, 0);
-    ESP_LOGI(TAG, "Accuracy result sent");
+    ESP_LOGI(TAG, "Accuracy test result sent, output size: %d bytes", (int)out_bytes);
 }
 
 void EdgeBenchClient::mqtt_event_handler(void* handler_args,
@@ -329,6 +335,7 @@ void EdgeBenchClient::handleMessage(const std::string& topic, const std::vector<
 }
 
 void EdgeBenchClient::run() {
+    ESP_LOGI(TAG, "Starting EdgeBenchClient for device %s", device_id_.c_str());
     connect();
     ESP_LOGI(TAG, "Connected as %s", device_id_.c_str());
     // Wait for the subscriptions to be established
