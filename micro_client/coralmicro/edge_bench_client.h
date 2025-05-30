@@ -10,7 +10,7 @@
 #include "third_party/tflite-micro/tensorflow/lite/micro/micro_interpreter.h"
 #include "third_party/tflite-micro/tensorflow/lite/micro/micro_error_reporter.h"
 
-static constexpr int kMqttMaxPayloadSize = 12800;
+static constexpr int kMqttMaxPayloadSize = 196808;
 
 struct MqttMessage {
     std::string     topic;
