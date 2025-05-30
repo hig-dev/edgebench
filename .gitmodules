@@ -5,3 +5,6 @@
 	path = micro_client/coralmicro/pahomqtt
 	url = https://github.com/eclipse-paho/paho.mqtt.embedded-c.git
 	ignore = dirty
+[submodule "micro_client/grove_vision_ai_v2"]
+	path = micro_client/grove_vision_ai_v2
+	url = https://github.com/hig-dev/edgebench_grove_vision_ai_v2.git
