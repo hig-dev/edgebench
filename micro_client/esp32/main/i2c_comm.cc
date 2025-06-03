@@ -9,6 +9,8 @@
 #include "i2c_comm.h"
 #include <algorithm>
 
+#define I2C_DELAY 5
+
 static const char *TAG = "I2CComm";
 
 const static uint16_t CRC16_MAXIM_TABLE[256] = {
@@ -210,7 +212,7 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
         {
             return ret;
         }
-        vTaskDelay(5 / portTICK_PERIOD_MS); // Small delay to avoid flooding the bus
+        vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS); // Small delay to avoid flooding the bus
     }
     return ESP_OK;
 }
@@ -226,7 +228,7 @@ int I2CComm::read_latency_result_ms()
     uint8_t b = 0;
     auto write_ret = write_(I2CCOMM_FEATURE_LATENCY_RESULT, 0, 1, &b);
 
-    vTaskDelay(10 / portTICK_PERIOD_MS); // Small delay to allow processing
+    vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS); // Small delay to allow processing
 
     auto read_buffer = std::vector<uint8_t>(10); // 1 byte feature, 1 byte cmd, 2 bytes data_len, 4 bytes latency, 2 bytes crc
     auto read_ret = i2c_master_receive(dev_handle_, read_buffer.data(), read_buffer.size(), -1);
@@ -279,11 +281,11 @@ std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
         return std::vector<uint8_t>();
     }
 
-    const int max_chunk_size = 128;
+    const int max_chunk_size = 192;
 
     for (int offset = 0; offset < model_output_size; offset += max_chunk_size)
     {
-        vTaskDelay(10 / portTICK_PERIOD_MS); // Small delay to avoid flooding the bus
+        vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS); // Small delay to avoid flooding the bus
         int chunk_size = std::min(max_chunk_size, model_output_size - offset);
         uint8_t write_buffer[8] =
         {
@@ -305,7 +307,7 @@ std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
 
         auto read_buffer = std::vector<uint8_t>(chunk_size + 6); // 6 bytes for header and checksum
 
-        vTaskDelay(10 / portTICK_PERIOD_MS); // Small delay to allow processing
+        vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS); // Small delay to allow processing
         auto read_ret = i2c_master_receive(dev_handle_, read_buffer.data(), read_buffer.size(), -1);
         if (read_ret != ESP_OK)
         {
