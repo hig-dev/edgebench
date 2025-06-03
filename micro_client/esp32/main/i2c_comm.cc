@@ -91,23 +91,22 @@ std::vector<uint8_t> I2CComm::create_packet_(uint8_t feature, uint8_t cmd, uint1
 
     // Allocate memory for the packet
     const int header_len = 4; // 1 byte for feature, 1 byte for command, 2 bytes for data length
-    const int crc_len = 2; // CRC length
+    const int crc_len = 2;    // CRC length
     int total_len = header_len + data_len + crc_len;
     auto packet = std::vector<uint8_t>(total_len);
 
     // Fill the packet header
     packet[0] = feature; // Feature byte
     packet[1] = cmd;     // Command byte
-    packet[3] = (data_len >> 8) & 0xFF; // High byte of data length
-    packet[2] = data_len & 0xFF;        // Low byte of data length
+    packet[2] = data_len >> 8;
+    packet[3] = data_len & 0xFF; // Low byte of data length
 
     // Copy the data into the packet
     memcpy(packet.data() + header_len, data, data_len);
 
     // Calculate CRC (not implemented in this example)
-    uint16_t crc = 0; // Placeholder for CRC calculation
-    packet[total_len - 2] = (crc >> 8) & 0xFF; // High byte of CRC
-    packet[total_len - 1] = crc & 0xFF;        // Low byte of CRC
+    packet[header_len + data_len] = 0xFF;
+    packet[header_len + data_len + 1] = 0xFF;
 
     return packet;
 }
@@ -137,7 +136,7 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
     {
         return write_(feature, cmd, data_len, data);
     }
-    
+
     // Send data in chunks if it exceeds the maximum length
     // Chunk format: offset (4 bytes), data
     int effective_max_pl_len = MAX_PL_LEN - 4; // 4 bytes for offset
@@ -147,7 +146,7 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
     {
         int offset = i * effective_max_pl_len;
         int chunk_size = std::min(effective_max_pl_len, data_len - offset);
-        
+
         // Prepare the chunk data
         uint8_t *chunk_data = (uint8_t *)malloc(chunk_size + 4);
         if (chunk_data == NULL)
@@ -157,10 +156,10 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
         }
 
         // Set the offset in the first 4 bytes
-        chunk_data[3] = (offset >> 24) & 0xFF; // High byte
-        chunk_data[2] = (offset >> 16) & 0xFF;
-        chunk_data[1] = (offset >> 8) & 0xFF;
-        chunk_data[0] = offset & 0xFF; // Low byte
+        chunk_data[0] = uint8_t(offset >> 24);
+        chunk_data[1] = uint8_t(offset >> 16);
+        chunk_data[2] = uint8_t(offset >> 8);
+        chunk_data[3] = uint8_t(offset);
 
         // Copy the actual data
         memcpy(chunk_data + 4, data + offset, chunk_size);
@@ -176,7 +175,8 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
     return ESP_OK;
 }
 
-int I2CComm::read_latency_result_ms() {
+int I2CComm::read_latency_result_ms()
+{
     if (!initialized_)
     {
         ESP_LOGE(TAG, "I2C not initialized");
@@ -185,9 +185,9 @@ int I2CComm::read_latency_result_ms() {
 
     uint8_t b = 0;
     auto write_ret = write_(I2CCOMM_FEATURE_LATENCY_RESULT, 0, 1, &b);
-    
+
     vTaskDelay(10 / portTICK_PERIOD_MS); // Small delay to allow processing
-    
+
     auto read_buffer = std::vector<uint8_t>(10); // 1 byte feature, 1 byte cmd, 2 bytes data_len, 4 bytes latency, 2 bytes crc
     auto read_ret = i2c_master_receive(dev_handle_, read_buffer.data(), read_buffer.size(), -1);
     if (read_ret != ESP_OK)
@@ -198,16 +198,17 @@ int I2CComm::read_latency_result_ms() {
 
     uint8_t feature = read_buffer[0];
     uint8_t cmd = read_buffer[1];
-    uint16_t data_len = (static_cast<uint16_t>(read_buffer[3]) << 8) | read_buffer[2];
+    uint16_t data_len = (static_cast<uint16_t>(read_buffer[2]) << 8) |
+                        static_cast<uint16_t>(read_buffer[3]);
     if (feature != I2CCOMM_FEATURE_LATENCY_RESULT || cmd != 0 || data_len != 4)
     {
         ESP_LOGE(TAG, "Invalid latency response: feature=%02X, cmd=%02X, data_len=%d", feature, cmd, data_len);
     }
 
-    int ms = (static_cast<int>(read_buffer[7]) << 24) |
-             (static_cast<int>(read_buffer[6]) << 16) |
-             (static_cast<int>(read_buffer[5]) << 8) |
-             static_cast<int>(read_buffer[4]);
+    int ms = (static_cast<int>(read_buffer[4]) << 24) |
+             (static_cast<int>(read_buffer[5]) << 16) |
+             (static_cast<int>(read_buffer[6]) << 8) |
+             static_cast<int>(read_buffer[7]);
 
     uint16_t crc = (static_cast<uint16_t>(read_buffer[9]) << 8) | read_buffer[8];
     ESP_LOGI(TAG, "Read latency result: %d ms, CRC: %04X", ms, crc);
@@ -227,17 +228,17 @@ std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
 
     for (int offset = 0; offset < model_output_size; offset += MAX_PL_LEN)
     {
-        auto transmit_ret = write_(I2CCOMM_FEATURE_ACCURACY_RESULT, 0, sizeof(offset),  reinterpret_cast<uint8_t *>(&offset));
+        auto transmit_ret = write_(I2CCOMM_FEATURE_ACCURACY_RESULT, 0, sizeof(offset), reinterpret_cast<uint8_t *>(&offset));
         if (transmit_ret != ESP_OK)
         {
             ESP_LOGE(TAG, "I2C write failed: %s", esp_err_to_name(transmit_ret));
             return std::vector<uint8_t>();
         }
         vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to allow processing
-        
-        int chunk_size = std::min(MAX_PL_LEN, model_output_size - offset);        
+
+        int chunk_size = std::min(MAX_PL_LEN, model_output_size - offset);
         auto read_buffer = std::vector<uint8_t>(chunk_size + 6); // 6 bytes for header and checksum
-        auto read_ret = i2c_master_receive(dev_handle_, read_buffer.data(),read_buffer.size(), -1);
+        auto read_ret = i2c_master_receive(dev_handle_, read_buffer.data(), read_buffer.size(), -1);
         if (read_ret != ESP_OK)
         {
             ESP_LOGE(TAG, "I2C read failed: %s", esp_err_to_name(read_ret));
@@ -246,7 +247,8 @@ std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
 
         uint8_t feature = read_buffer[0];
         uint8_t cmd = read_buffer[1];
-        uint16_t data_len = (static_cast<uint16_t>(read_buffer[3]) << 8) | read_buffer[2];
+        uint16_t data_len = (static_cast<uint16_t>(read_buffer[2]) << 8) |
+                            static_cast<uint16_t>(read_buffer[3]);
         if (feature != I2CCOMM_FEATURE_ACCURACY_RESULT || cmd != 0 || data_len != chunk_size)
         {
             ESP_LOGE(TAG, "Invalid accuracy response: feature=%02X, cmd=%02X, data_len=%d", feature, cmd, data_len);

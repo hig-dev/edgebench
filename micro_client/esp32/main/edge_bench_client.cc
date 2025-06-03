@@ -86,7 +86,12 @@ void EdgeBenchClient::startLatencyTest()
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
     // Send iterations count
-    ret = i2c_comm_.write(I2CCOMM_FEATURE_ITERATIONS, 0, sizeof(iterations_), reinterpret_cast<uint8_t *>(&iterations_));
+    uint8_t iterations_buffer[4] = {
+        uint8_t(iterations_ >> 24),
+        uint8_t(iterations_ >> 16),
+        uint8_t(iterations_ >> 8),
+        uint8_t(iterations_)};
+    ret = i2c_comm_.write(I2CCOMM_FEATURE_ITERATIONS, 0, 4, iterations_buffer);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to set iterations: %s", esp_err_to_name(ret));
