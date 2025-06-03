@@ -47,7 +47,7 @@ esp_err_t I2CComm::init()
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
         .intr_priority = 0,
-        .trans_queue_depth = 10,
+        .trans_queue_depth = 0,
         .flags = {
             .enable_internal_pullup = true,
             .allow_pd = false,
@@ -65,6 +65,10 @@ esp_err_t I2CComm::init()
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = i2c_address_,
         .scl_speed_hz = I2C_MASTER_FREQ_HZ,
+        .scl_wait_us = 12 * 1000,
+        .flags = {
+            .disable_ack_check = false,
+        },
     };
 
     ret = i2c_master_bus_add_device(bus_handle_, &dev_config, &dev_handle_);
@@ -121,7 +125,7 @@ esp_err_t I2CComm::write_(uint8_t feature, uint8_t cmd, uint16_t data_len, uint8
 
     std::vector<uint8_t> write_buf = create_packet_(feature, cmd, data_len, data);
     ESP_LOGI(TAG, "Writing to I2C device, payload length: %d, total length: %d", data_len, write_buf.size());
-    auto ret = i2c_master_transmit(dev_handle_, write_buf.data(), write_buf.size(), I2C_MASTER_TIMEOUT_MS);
+    auto ret = i2c_master_transmit(dev_handle_, write_buf.data(), write_buf.size(), -1);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "I2C write failed: %s", esp_err_to_name(ret));
@@ -163,7 +167,8 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
 
         // Copy the actual data
         memcpy(chunk_data + 4, data + offset, chunk_size);
-        ESP_LOGI(TAG, "Writing chunk %d/%d, size: %d", i + 1, total_chunks, chunk_size + 4);
+        ESP_LOGI(TAG, "Writing chunk %d/%d, size: %d, offset: %d",
+                 i + 1, total_chunks, chunk_size, offset);
         esp_err_t ret = write_(feature, cmd, chunk_size + 4, chunk_data);
         free(chunk_data);
         if (ret != ESP_OK)
@@ -210,8 +215,7 @@ int I2CComm::read_latency_result_ms()
              (static_cast<int>(read_buffer[6]) << 8) |
              static_cast<int>(read_buffer[7]);
 
-    uint16_t crc = (static_cast<uint16_t>(read_buffer[9]) << 8) | read_buffer[8];
-    ESP_LOGI(TAG, "Read latency result: %d ms, CRC: %04X", ms, crc);
+    ESP_LOGI(TAG, "Read latency result: %d ms", ms);
 
     return ms;
 }
@@ -225,19 +229,31 @@ std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
     }
 
     auto output_buffer = std::vector<uint8_t>(model_output_size);
+    if (output_buffer.size() != DEFAULT_OUTPUT_SIZE)
+    {
+        ESP_LOGE(TAG, "Output buffer size mismatch: expected %d, got %zu", DEFAULT_OUTPUT_SIZE, output_buffer.size());
+        return std::vector<uint8_t>();
+    }
 
     for (int offset = 0; offset < model_output_size; offset += MAX_PL_LEN)
     {
-        auto transmit_ret = write_(I2CCOMM_FEATURE_ACCURACY_RESULT, 0, sizeof(offset), reinterpret_cast<uint8_t *>(&offset));
+        vTaskDelay(10 / portTICK_PERIOD_MS); // Small delay to avoid flooding the bus
+        uint8_t offset_buffer[4] = {
+            uint8_t(offset >> 24),
+            uint8_t(offset >> 16),
+            uint8_t(offset >> 8),
+            uint8_t(offset)};
+        auto transmit_ret = write_(I2CCOMM_FEATURE_ACCURACY_RESULT, 0, 4, offset_buffer);
         if (transmit_ret != ESP_OK)
         {
             ESP_LOGE(TAG, "I2C write failed: %s", esp_err_to_name(transmit_ret));
             return std::vector<uint8_t>();
         }
-        vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to allow processing
 
         int chunk_size = std::min(MAX_PL_LEN, model_output_size - offset);
         auto read_buffer = std::vector<uint8_t>(chunk_size + 6); // 6 bytes for header and checksum
+
+        vTaskDelay(10 / portTICK_PERIOD_MS); // Small delay to allow processing
         auto read_ret = i2c_master_receive(dev_handle_, read_buffer.data(), read_buffer.size(), -1);
         if (read_ret != ESP_OK)
         {
@@ -256,7 +272,6 @@ std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
 
         ESP_LOGI(TAG, "Read accuracy result: offset=%d, size=%d", offset, chunk_size);
         memcpy(output_buffer.data() + offset, read_buffer.data() + 4, chunk_size);
-        vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid flooding the bus
     }
     return output_buffer;
 }

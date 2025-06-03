@@ -68,7 +68,7 @@ private:
     static constexpr uint32_t I2C_MASTER_FREQ_HZ = 400000;
     static constexpr int I2C_MASTER_TX_BUF_DISABLE = 0;
     static constexpr int I2C_MASTER_RX_BUF_DISABLE = 0;
-    static constexpr int I2C_MASTER_TIMEOUT_MS = 1000;
+    //static constexpr int I2C_MASTER_TIMEOUT_MS = 1000;
 
     uint8_t i2c_address_;
     i2c_master_bus_handle_t bus_handle_;

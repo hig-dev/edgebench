@@ -184,7 +184,7 @@ void EdgeBenchClient::startAccuracyTest()
     esp_mqtt_client_publish(client_,
                             topic_.RESULT_ACCURACY().c_str(),
                             reinterpret_cast<const char *>(output_tensor.data()),
-                            model_output_size_, 1, 0);
+                            output_tensor.size(), 1, 0);
     ESP_LOGI(TAG, "Accuracy test result sent, output size: %d bytes", (int)output_tensor.size());
 #else
     interpreter_->Invoke();
