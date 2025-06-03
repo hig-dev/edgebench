@@ -11,6 +11,7 @@ import paho.mqtt.client as mqtt
 from pck_eval import PckEvaluator
 from shared import TestMode, ClientStatus, Command, Topic, Logger
 from typing import Dict
+from fastcrc import crc16
 
 BYTE_ORDER = "big"
 CHUNK_SIZE = 196608
@@ -152,7 +153,7 @@ class EdgeBenchManager:
             input_data = np.around(input_data).astype(np.int8)
         input_data_bytes = input_data.flatten().tobytes()
         self.logger.log(
-            f"Sending input (shape: {input_data.shape}, dtype: {input_data.dtype}, bytes: {len(input_data_bytes)})"
+            f"Sending input (shape: {input_data.shape}, dtype: {input_data.dtype}, bytes: {len(input_data_bytes)}, crc16: {crc16.maxim_dow(input_data_bytes):#x})"
         )
         self.client.publish(topic, input_data_bytes, qos=1)
 
@@ -345,7 +346,7 @@ class EdgeBenchManager:
                             dtype=self.model_output_details[model_path]["dtype"],
                         ).reshape(self.model_output_details[model_path]["shape"])
                         l.log(
-                            f"Received result for input {index + 1}/{test_data_length}"
+                            f"Received result for input {index + 1}/{test_data_length}, bytes: {len(message.payload)} crc16: {crc16.maxim_dow(message.payload):#x}"
                         )
                 pck_evaluator.process(result)
 
