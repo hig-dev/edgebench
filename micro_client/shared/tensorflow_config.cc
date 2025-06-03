@@ -44,7 +44,9 @@ bool reserve_model_buffer() {
 }
 
 void create_op_resolver() {
-#if EDGETPU
+#if I2C_MASTER
+    // Op resolver not needed for I2C master mode
+#elif EDGETPU
     auto *micro_op_resolver = new tflite::MicroMutableOpResolver<1>();
     micro_op_resolver->AddCustom(coralmicro::kCustomOp, coralmicro::RegisterCustomOp());    
     micro_op_resolver_ = micro_op_resolver;

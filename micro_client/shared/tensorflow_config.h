@@ -15,7 +15,10 @@
 #include "../coralmicro/coralmicro/libs/tpu/edgetpu_op.h"
 #endif
 
-#if ESP32
+#if I2C_MASTER
+static constexpr int kModelBufferSize = 1;
+static constexpr int kArenaSize = 1;
+#elif ESP32
 static constexpr int kModelBufferSize = 4488760;
 static constexpr int kArenaSize = 3200 * 1024;
 #elif CORALMICRO

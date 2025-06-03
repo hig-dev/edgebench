@@ -1,11 +1,16 @@
 #ifndef EDGE_BENCH_CLIENT_H
 #define EDGE_BENCH_CLIENT_H
 
+#define I2C_MASTER 1
+
 #include <string>
 #include <vector>
 #include "mqtt_topic.h"
 #include "mqtt_client.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
+#if I2C_MASTER
+#include "i2c_comm.h"
+#endif
 
 struct MqttMessage {
     std::string     topic;
@@ -43,6 +48,7 @@ private:
     TestMode                             mode_{TestMode::NONE};
     int                                  model_size_{0};
     size_t                               model_input_size_{0};
+    size_t                               model_output_size_{0};
     bool                                 latency_input_ready_{false};
     tflite::MicroInterpreter*            interpreter_{nullptr};
     int8_t*                              input_tensor_{nullptr};
@@ -51,6 +57,9 @@ private:
     bool                                 sent_ready_for_input_{false};
     bool                                 sent_ready_for_task_{false};
     bool                                 quit_{false};
+    #if I2C_MASTER
+    I2CComm                              i2c_comm_{DEFAULT_I2C_ADDRESS};
+    #endif
 };
 
 #endif // EDGE_BENCH_CLIENT_H

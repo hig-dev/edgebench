@@ -23,6 +23,7 @@ class EdgeBenchManager:
         data_dir: str,
         reports_dir: str,
         skip: bool = False,
+        skip_send_model: bool = False,
         chunked: bool = False,
         broker_host="127.0.0.1",
         broker_port=1883,
@@ -32,6 +33,7 @@ class EdgeBenchManager:
         self.data_dir = data_dir
         self.reports_dir = reports_dir
         self.skip = skip
+        self.skip_send_model = skip_send_model
         self.chunked = chunked
         self.client = mqtt.Client(
             client_id=str(uuid.uuid4()),
@@ -210,8 +212,9 @@ class EdgeBenchManager:
             )
             self.set_mode(TestMode.LATENCY)
             self.set_iterations(iterations)
-            self.wait_for_status(ClientStatus.READY_FOR_MODEL)
-            self.send_model(model_path)
+            if not self.skip_send_model:
+                self.wait_for_status(ClientStatus.READY_FOR_MODEL)
+                self.send_model(model_path)
             self.wait_for_status(ClientStatus.READY_FOR_INPUT)
             self.send_input(model_path, self.latency_input, t.INPUT_LATENCY())
             self.wait_for_status(ClientStatus.READY_FOR_TASK)
@@ -317,8 +320,9 @@ class EdgeBenchManager:
                 self.data_dir, self.model_output_details[model_path], limit=limit
             )
             self.set_mode(TestMode.ACCURACY)
-            self.wait_for_status(ClientStatus.READY_FOR_MODEL)
-            self.send_model(model_path)
+            if not self.skip_send_model:
+                self.wait_for_status(ClientStatus.READY_FOR_MODEL)
+                self.send_model(model_path)
             self.wait_for_status(ClientStatus.READY_FOR_TASK)
 
             # Load test data
@@ -421,6 +425,7 @@ def main():
         default=0,
         help="Limit for accuracy test (0 for no limit)",
     )
+    parser.add_argument("--skip-send-model", action="store_true", help="Skip sending model")
     parser.add_argument("--latency", action="store_true", help="Run latency test")
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy test")
     args = parser.parse_args()
@@ -461,6 +466,7 @@ def main():
         data_dir=args.data_dir,
         reports_dir=args.reports_dir,
         skip=args.skip,
+        skip_send_model=args.skip_send_model,
         chunked=args.chunked,
         broker_host=args.broker_host,
         broker_port=args.broker_port,

@@ -25,6 +25,11 @@
 
 #define ESP_MAXIMUM_RETRY  10
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
+#if I2C_MASTER
+#define DEVICE_NAME "grove_vision_ai_v2"
+#else
+#define DEVICE_NAME "esp32s3"
+#endif
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -113,7 +118,7 @@ void wifi_init_sta(void)
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s",
                  WIFI_SSID);
-        auto client = EdgeBenchClient("esp32s3",
+        auto client = EdgeBenchClient(DEVICE_NAME,
                             MQTT_BROKER_HOST,
                             MQTT_BROKER_PORT);
         client.run();
