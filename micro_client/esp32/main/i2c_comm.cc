@@ -9,7 +9,7 @@
 #include "i2c_comm.h"
 #include <algorithm>
 
-#define I2C_DELAY 5
+#define I2C_DELAY 3
 
 static const char *TAG = "I2CComm";
 

@@ -119,7 +119,9 @@ void EdgeBenchClient::startLatencyTest()
         quit_ = true;
         return;
     }
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
+    const int estimated_latency_ms = 260; // 150ms for mobileone_s0 or 260ms for effivientvit_b0
+    int estimated_time_ms = iterations_ * estimated_latency_ms;
+    vTaskDelay(estimated_time_ms / portTICK_PERIOD_MS);
     // Receive result from I2C device (ms)
     int ms = i2c_comm_.read_latency_result_ms();
     sendStatus(ClientStatus::DONE);
@@ -156,7 +158,7 @@ void EdgeBenchClient::startAccuracyTest()
         quit_ = true;
         return;
     }
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     // Send input tensor
     ESP_LOGI(TAG, "Send input tensor: %zu bytes", model_input_size_);
     ret = i2c_comm_.write(I2CCOMM_FEATURE_INPUT, 0, model_input_size_, reinterpret_cast<uint8_t *>(input_tensor_));
@@ -167,7 +169,7 @@ void EdgeBenchClient::startAccuracyTest()
         return;
     }
     // Wait for the device to be ready
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     // Send start command
     uint8_t cmd = static_cast<uint8_t>(Command::START_LATENCY_TEST);
     ret = i2c_comm_.write(I2CCOMM_FEATURE_CMD, 0, sizeof(cmd), &cmd);
@@ -177,7 +179,7 @@ void EdgeBenchClient::startAccuracyTest()
         quit_ = true;
         return;
     }
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
+    vTaskDelay(270 / portTICK_PERIOD_MS);
     // Receive result from I2C device (ms)
     model_output_size_ = DEFAULT_OUTPUT_SIZE;
     auto output_tensor = i2c_comm_.read_accuracy_result(model_output_size_);
