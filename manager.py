@@ -55,9 +55,25 @@ class EdgeBenchManager:
         self.model_input_details: Dict[str, Dict] = {}
         self.model_output_details: Dict[str, Dict] = {}
         for model_path in model_paths:
-            interpreter = tflite.Interpreter(model_path=model_path)
-            self.model_input_details[model_path] = interpreter.get_input_details()[0]
-            self.model_output_details[model_path] = interpreter.get_output_details()[0]
+            if model_path.endswith(".tflite"):
+                interpreter = tflite.Interpreter(model_path=model_path)
+                self.model_input_details[model_path] = interpreter.get_input_details()[0]
+                self.model_output_details[model_path] = interpreter.get_output_details()[0]
+            elif model_path.endswith(".hef"):
+                # TODO: Implement HEF model loading
+                # For now, we assume a fixed input/output shape and dtype
+                self.model_input_details[model_path] = {
+                    "shape": [1, 256, 256, 3],
+                    "dtype": np.float32,
+                }
+                self.model_output_details[model_path] = {
+                    "shape": [1, 64, 64, 16],
+                    "dtype": np.float32,
+                }
+            else:
+                raise ValueError(
+                    f"Unsupported model file type for {model_path}. Only .tflite and .hef are supported."
+                )
 
         # Setup callbacks
         self.client.on_connect = self.on_connect
@@ -403,6 +419,7 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "reports"),
         help="Reports directory",
     )
+    parser.add_argument("--file-type", default=".tflite", help="Model file type")
     parser.add_argument(
         "-f", "--filter", nargs="+", help="Model name filters (must contain all)"
     )
@@ -438,7 +455,7 @@ def main():
         [
             os.path.join(args.models_dir, f)
             for f in os.listdir(args.models_dir)
-            if f.endswith(".tflite")
+            if f.endswith(args.file_type)
         ]
     )
     print(f"Found {len(model_paths)} models in {args.models_dir}")
