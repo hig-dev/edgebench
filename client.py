@@ -13,9 +13,17 @@ BYTE_ORDER = "big"
 
 
 class EdgeBenchClient:
-    def __init__(self, device_id, broker_host="127.0.0.1", broker_port=1883, threads=1):
+    def __init__(
+        self,
+        device_id,
+        broker_host="127.0.0.1",
+        broker_port=1883,
+        threads=1,
+        use_hailo=False,
+    ):
         self.device_id = device_id
         self.threads = threads
+        self.use_hailo = use_hailo
         self.logger = Logger("EdgeBenchClient")
         self.topic = Topic(device_id)
         self.client = mqtt.Client(
@@ -98,6 +106,44 @@ class EdgeBenchClient:
         elapsed_time_ms = int(elapsed_time * 1000)
         self.send_result(elapsed_time_ms)
 
+    def setup_interpreter(self, model_path):
+        if self.use_hailo:
+            from hailo_interpreter import HailoInterpreter
+
+            self.interpreter = HailoInterpreter(model_path)
+            self.logger.log("Hailo interpreter initialized with model")
+        else:
+            self.interpreter = tflite.Interpreter(
+                model_path=model_path, num_threads=self.threads
+            )
+            self.interpreter.allocate_tensors()
+            self.logger.log("Model loaded and tensors allocated")
+
+    def set_interpreter_input(self, input_bytes):
+        if self.use_hailo:
+            input_shape = self.interpreter.get_input_shape()
+            input_data = np.frombuffer(input_bytes, dtype=np.float32).reshape(
+                input_shape
+            )
+            self.interpreter.set_input(input_data)
+        else:
+            input_details = self.interpreter.get_input_details()
+            latency_input = np.frombuffer(
+                input_bytes, dtype=input_details[0]["dtype"]
+            ).reshape(input_details[0]["shape"])
+            self.interpreter.set_tensor(input_details[0]["index"], latency_input)
+
+    def get_interpreter_output(self):
+        if self.use_hailo:
+            output_data = self.interpreter.get_output()
+            output_bytes = output_data.flatten().tobytes()
+            return output_bytes
+        else:
+            output_details = self.interpreter.get_output_details()
+            output_data = self.interpreter.get_tensor(output_details[0]["index"])
+            output_bytes = output_data.flatten().tobytes()
+            return output_bytes
+
     def run(self):
         l = self.logger
         t = self.topic
@@ -123,38 +169,24 @@ class EdgeBenchClient:
             elif topic == t.MODEL():
                 model_bytes = payload
                 l.log(f"Received model, size: {len(model_bytes)} bytes")
-                with tempfile.NamedTemporaryFile(suffix=".tflite") as temp_file:
+                model_file_type = ".hef" if self.use_hailo else ".tflite"
+                with tempfile.NamedTemporaryFile(suffix=model_file_type) as temp_file:
                     model_path = temp_file.name
                     with open(model_path, "wb") as f:
                         f.write(model_bytes)
                     l.log(f"Model saved to {model_path}")
-                    self.interpreter = tflite.Interpreter(
-                        model_path=model_path, num_threads=self.threads
-                    )
-                    self.interpreter.allocate_tensors()
-                    l.log("Model loaded and tensors allocated")
+                    self.setup_interpreter(model_path)
             elif topic == t.INPUT_LATENCY():
                 self.latency_input_bytes = payload
                 l.log(f"Received input, size: {len(payload)} bytes")
-                input_details = self.interpreter.get_input_details()
-                latency_input = np.frombuffer(
-                    self.latency_input_bytes, dtype=input_details[0]["dtype"]
-                ).reshape(input_details[0]["shape"])
-                self.interpreter.set_tensor(input_details[0]["index"], latency_input)
-                
+                self.set_interpreter_input(self.latency_input_bytes)
+
             elif topic == t.INPUT_ACCURACY():
                 input_bytes = payload
                 l.log(f"Received input, size: {len(input_bytes)} bytes")
-                input_details = self.interpreter.get_input_details()
-                output_details = self.interpreter.get_output_details()
-                input = np.frombuffer(
-                    input_bytes, dtype=input_details[0]["dtype"]
-                ).reshape(input_details[0]["shape"])
-
-                self.interpreter.set_tensor(input_details[0]["index"], input)
+                self.set_interpreter_input(input_bytes)
                 self.interpreter.invoke()
-                output_data = self.interpreter.get_tensor(output_details[0]["index"])
-                output_bytes = output_data.flatten().tobytes()
+                output_bytes = self.get_interpreter_output()
                 self.client.publish(self.topic.RESULT_ACCURACY(), output_bytes, qos=1)
             elif topic == t.CMD():
                 cmd = Command.from_bytes(payload, byteorder=BYTE_ORDER)
@@ -175,29 +207,36 @@ class EdgeBenchClient:
                     self.interpreter = None
                     self.latency_input_bytes = None
                     continue
-            
-            latency_config_ready = (
-                self.mode == TestMode.LATENCY
-                and self.iterations > 0
-            )
-            accuracy_config_ready = (
-                self.mode == TestMode.ACCURACY
-            )
+
+            latency_config_ready = self.mode == TestMode.LATENCY and self.iterations > 0
+            accuracy_config_ready = self.mode == TestMode.ACCURACY
             config_ready = latency_config_ready or accuracy_config_ready
             interpreter_ready = self.interpreter is not None
-            input_ready = self.latency_input_bytes is not None or self.mode == TestMode.ACCURACY
+            input_ready = (
+                self.latency_input_bytes is not None or self.mode == TestMode.ACCURACY
+            )
 
             if not sent_ready_for_model and config_ready:
                 sent_ready_for_model = True
                 l.log("All config received, requesting model")
                 self.send_status(ClientStatus.READY_FOR_MODEL)
 
-            if not sent_ready_for_input and config_ready and interpreter_ready and self.mode == TestMode.LATENCY:
+            if (
+                not sent_ready_for_input
+                and config_ready
+                and interpreter_ready
+                and self.mode == TestMode.LATENCY
+            ):
                 sent_ready_for_input = True
                 l.log("Interpreter ready, waiting for input")
                 self.send_status(ClientStatus.READY_FOR_INPUT)
 
-            if not sent_ready_for_task and config_ready and interpreter_ready and input_ready:
+            if (
+                not sent_ready_for_task
+                and config_ready
+                and interpreter_ready
+                and input_ready
+            ):
                 sent_ready_for_task = True
                 l.log("Ready for task, waiting for input or command")
                 self.send_status(ClientStatus.READY_FOR_TASK)
@@ -211,9 +250,10 @@ def main():
     parser.add_argument(
         "--broker-port", type=int, default=1883, help="MQTT broker port"
     )
+    parser.add_argument("--hailo", action="store_true", help="Use Hailo device")
     args = parser.parse_args()
     client = EdgeBenchClient(
-        args.device, args.broker_host, args.broker_port, args.threads
+        args.device, args.broker_host, args.broker_port, args.threads, args.hailo
     )
     client.run()
 
