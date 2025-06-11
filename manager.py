@@ -70,6 +70,17 @@ class EdgeBenchManager:
                     "shape": [1, 64, 64, 16],
                     "dtype": np.float32,
                 }
+            elif model_path.endswith(".onnx"):
+                # TODO: Implement ONNX model loading
+                # For now, we assume a fixed input/output shape and dtype
+                self.model_input_details[model_path] = {
+                    "shape": [1, 3, 256, 256],
+                    "dtype": np.float32,
+                }
+                self.model_output_details[model_path] = {
+                    "shape": [1, 16, 64, 64],
+                    "dtype": np.float32,
+                }
             else:
                 raise ValueError(
                     f"Unsupported model file type for {model_path}. Only .tflite and .hef are supported."

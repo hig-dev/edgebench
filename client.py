@@ -1,6 +1,6 @@
 import argparse
+from enum import IntEnum
 import uuid
-import ai_edge_litert.interpreter as tflite
 import numpy as np
 import time
 import paho.mqtt.client as mqtt
@@ -12,6 +12,12 @@ from shared import TestMode, ClientStatus, Command, Topic, Logger
 BYTE_ORDER = "big"
 
 
+class InterpreterType(IntEnum):
+    TFLITE = 0
+    ORT = 1
+    HAILO = 2
+
+
 class EdgeBenchClient:
     def __init__(
         self,
@@ -19,11 +25,13 @@ class EdgeBenchClient:
         broker_host="127.0.0.1",
         broker_port=1883,
         threads=1,
-        use_hailo=False,
+        interpreter_type=InterpreterType.TFLITE,
+        ort_execution_providers=[],
     ):
         self.device_id = device_id
         self.threads = threads
-        self.use_hailo = use_hailo
+        self.interpreter_type = interpreter_type
+        self.ort_execution_providers = ort_execution_providers
         self.logger = Logger("EdgeBenchClient")
         self.topic = Topic(device_id)
         self.client = mqtt.Client(
@@ -107,20 +115,43 @@ class EdgeBenchClient:
         self.send_result(elapsed_time_ms)
 
     def setup_interpreter(self, model_path):
-        if self.use_hailo:
+        if self.interpreter_type == InterpreterType.ORT:
+            from ort_interpreter import ORTInterpreter
+
+            if (
+                not self.ort_execution_providers
+                or len(self.ort_execution_providers) == 0
+            ):
+                raise ValueError(
+                    "ORT execution providers must be specified for ORT interpreter"
+                )
+
+            self.interpreter = ORTInterpreter(
+                onnx_path=model_path,
+                exection_providers=self.ort_execution_providers,
+            )
+            self.logger.log(
+                f"ORT interpreter initialized with model and providers: {self.ort_execution_providers}"
+            )
+        elif self.interpreter_type == InterpreterType.HAILO:
             from hailo_interpreter import HailoInterpreter
 
             self.interpreter = HailoInterpreter(model_path)
             self.logger.log("Hailo interpreter initialized with model")
         else:
-            self.interpreter = tflite.Interpreter(
+            from ai_edge_litert.interpreter import Interpreter as TfliteInterpreter
+
+            self.interpreter = TfliteInterpreter(
                 model_path=model_path, num_threads=self.threads
             )
             self.interpreter.allocate_tensors()
             self.logger.log("Model loaded and tensors allocated")
 
     def set_interpreter_input(self, input_bytes):
-        if self.use_hailo:
+        if (
+            self.interpreter_type == InterpreterType.HAILO
+            or self.interpreter_type == InterpreterType.ORT
+        ):
             input_shape = self.interpreter.get_input_shape()
             input_data = np.frombuffer(input_bytes, dtype=np.float32).reshape(
                 input_shape
@@ -134,7 +165,10 @@ class EdgeBenchClient:
             self.interpreter.set_tensor(input_details[0]["index"], latency_input)
 
     def get_interpreter_output(self):
-        if self.use_hailo:
+        if (
+            self.interpreter_type == InterpreterType.HAILO
+            or self.interpreter_type == InterpreterType.ORT
+        ):
             output_data = self.interpreter.get_output()
             output_bytes = output_data.flatten().tobytes()
             return output_bytes
@@ -169,7 +203,9 @@ class EdgeBenchClient:
             elif topic == t.MODEL():
                 model_bytes = payload
                 l.log(f"Received model, size: {len(model_bytes)} bytes")
-                model_file_type = ".hef" if self.use_hailo else ".tflite"
+                model_file_type = ".hef" if self.interpreter_type == InterpreterType.HAILO else (
+                    ".onnx" if self.interpreter_type == InterpreterType.ORT else ".tflite"
+                )
                 with tempfile.NamedTemporaryFile(suffix=model_file_type) as temp_file:
                     model_path = temp_file.name
                     with open(model_path, "wb") as f:
@@ -251,9 +287,26 @@ def main():
         "--broker-port", type=int, default=1883, help="MQTT broker port"
     )
     parser.add_argument("--hailo", action="store_true", help="Use Hailo device")
+    parser.add_argument("--ort", action="store_true", help="Use ONNX Runtime")
+    parser.add_argument(
+        "--ort-execution-providers",
+        nargs="+",
+        default=[],
+        help="ONNX Runtime execution providers (e.g., CPUExecutionProvider, ShlExecutionProvider)",
+    )
     args = parser.parse_args()
+    interpreter_type = (
+        InterpreterType.HAILO
+        if args.hailo
+        else (InterpreterType.ORT if args.ort else InterpreterType.TFLITE)
+    )
     client = EdgeBenchClient(
-        args.device, args.broker_host, args.broker_port, args.threads, args.hailo
+        args.device,
+        args.broker_host,
+        args.broker_port,
+        args.threads,
+        interpreter_type,
+        args.ort_execution_providers,
     )
     client.run()
 
