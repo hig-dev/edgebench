@@ -37,11 +37,20 @@ class HHBInterpreter:
         return shape_tuple
 
     def set_input(self, input_data: np.ndarray):
-        self.input = input_data.copy()
-        if self.input.shape != self.get_input_shape():
+        input = input_data.copy()
+        arr = np.require(
+            input,
+            dtype=np.float32,
+            requirements=['C_CONTIGUOUS', 'ALIGNED']
+        )
+
+        expected = tuple(self.get_input_shape())
+        if arr.shape != expected:
             raise ValueError(
-                f"Input shape {self.input.shape} does not match expected shape {self.get_input_shape()}"
+                f"Input shape {arr.shape} does not match expected {expected}"
             )
+
+        self.input = arr
 
     def get_output(self) -> Optional[np.ndarray]:
         return self.get_output_by_index(0)
@@ -97,14 +106,6 @@ class HHBInterpreter:
         return res
 
     def session_run(self, inputs):
-        if not isinstance(inputs, (tuple, list)):
-            raise ValueError("Inputs needs: [ndarray, ndarray, ...]")
-
-        actual_in_num = self.get_input_number()
-        assert actual_in_num == len(
-            inputs
-        ), "Actual input number: {}, but get {}".format(actual_in_num, len(inputs))
-
         self.model_lib.session_run.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
