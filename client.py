@@ -16,6 +16,7 @@ class InterpreterType(IntEnum):
     TFLITE = 0
     ORT = 1
     HAILO = 2
+    HHB = 3
 
 
 class EdgeBenchClient:
@@ -138,6 +139,11 @@ class EdgeBenchClient:
 
             self.interpreter = HailoInterpreter(model_path)
             self.logger.log("Hailo interpreter initialized with model")
+        elif self.interpreter_type == InterpreterType.HHB:
+            from hhb_interpreter import HHBInterpreter
+
+            self.interpreter = HHBInterpreter(model_path)
+            self.logger.log("HHB interpreter initialized with model")
         else:
             from ai_edge_litert.interpreter import Interpreter as TfliteInterpreter
 
@@ -151,6 +157,7 @@ class EdgeBenchClient:
         if (
             self.interpreter_type == InterpreterType.HAILO
             or self.interpreter_type == InterpreterType.ORT
+            or self.interpreter_type == InterpreterType.HHB
         ):
             input_shape = self.interpreter.get_input_shape()
             input_data = np.frombuffer(input_bytes, dtype=np.float32).reshape(
@@ -168,6 +175,7 @@ class EdgeBenchClient:
         if (
             self.interpreter_type == InterpreterType.HAILO
             or self.interpreter_type == InterpreterType.ORT
+            or self.interpreter_type == InterpreterType.HHB
         ):
             output_data = self.interpreter.get_output()
             output_bytes = output_data.flatten().tobytes()
@@ -203,8 +211,18 @@ class EdgeBenchClient:
             elif topic == t.MODEL():
                 model_bytes = payload
                 l.log(f"Received model, size: {len(model_bytes)} bytes")
-                model_file_type = ".hef" if self.interpreter_type == InterpreterType.HAILO else (
-                    ".onnx" if self.interpreter_type == InterpreterType.ORT else ".tflite"
+                model_file_type = (
+                    ".hef"
+                    if self.interpreter_type == InterpreterType.HAILO
+                    else (
+                        ".onnx"
+                        if self.interpreter_type == InterpreterType.ORT
+                        else (
+                            ".zip"
+                            if self.interpreter_type == InterpreterType.HHB
+                            else ".tflite"
+                        )
+                    )
                 )
                 with tempfile.NamedTemporaryFile(suffix=model_file_type) as temp_file:
                     model_path = temp_file.name
@@ -287,6 +305,7 @@ def main():
         "--broker-port", type=int, default=1883, help="MQTT broker port"
     )
     parser.add_argument("--hailo", action="store_true", help="Use Hailo device")
+    parser.add_argument("--hhb", action="store_true", help="Use HHB")
     parser.add_argument("--ort", action="store_true", help="Use ONNX Runtime")
     parser.add_argument(
         "--ort-execution-providers",
@@ -298,7 +317,11 @@ def main():
     interpreter_type = (
         InterpreterType.HAILO
         if args.hailo
-        else (InterpreterType.ORT if args.ort else InterpreterType.TFLITE)
+        else (
+            InterpreterType.ORT
+            if args.ort
+            else (InterpreterType.HHB if args.hhb else InterpreterType.TFLITE)
+        )
     )
     client = EdgeBenchClient(
         args.device,
