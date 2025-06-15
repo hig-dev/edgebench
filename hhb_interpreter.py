@@ -29,10 +29,8 @@ class HHBInterpreter:
         self.output: Optional[np.ndarray] = None
 
     def get_input_shape(self) -> tuple:
-        shape_np: np.ndarray = self.get_output_shape_by_index(0)
-        shape_tuple = tuple(shape_np.astype(np.int32))
-        return shape_tuple
-
+        # TODO: Replace with actual input shape retrieval logic
+        return (1, 3, 256, 256)
     def get_output_shape(self) -> tuple:
         shape_np: np.ndarray = self.get_output_shape_by_index(0)
         shape_tuple = tuple(shape_np.astype(np.int32))

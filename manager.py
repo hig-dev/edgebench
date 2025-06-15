@@ -70,7 +70,7 @@ class EdgeBenchManager:
                     "shape": [1, 64, 64, 16],
                     "dtype": np.float32,
                 }
-            elif model_path.endswith(".onnx"):
+            elif model_path.endswith(".onnx") or model_path.endswith(".zip"):
                 # TODO: Implement ONNX model loading
                 # For now, we assume a fixed input/output shape and dtype
                 self.model_input_details[model_path] = {
