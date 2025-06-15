@@ -1,0 +1,15 @@
+{
+    "device_id": "hailo",
+    "model_name": "0-ViTPose-DeitTiny-mpii-256x256-light_v17.hef",
+    "test_data_length": 2958,
+    "Head PCK": 91.40518417462484,
+    "Shoulder PCK": 85.15625,
+    "Elbow PCK": 72.28640786852938,
+    "Wrist PCK": 64.52169003488326,
+    "Hip PCK": 75.36776233089694,
+    "Knee PCK": 65.66631426979959,
+    "Ankle PCK": 59.99033845529081,
+    "PCK": 74.4288316419464,
+    "PCK@0.1": 16.25552934665963,
+    "PCK-AUC": 22.16040851984283
+}

@@ -1,0 +1,8 @@
+{
+    "device_id": "workstation",
+    "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light_onnx2tf_int8.tflite",
+    "iterations": 100,
+    "avg_latency_ms": 17.558274269104004,
+    "avg_latency_ms_from_client": 17.08,
+    "energy_mWh": 0.0
+}

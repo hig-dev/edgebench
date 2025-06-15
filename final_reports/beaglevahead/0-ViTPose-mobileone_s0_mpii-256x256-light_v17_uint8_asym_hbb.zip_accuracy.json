@@ -1,0 +1,15 @@
+{
+    "device_id": "beaglevahead",
+    "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_v17_uint8_asym_hbb.zip",
+    "test_data_length": 2958,
+    "Head PCK": 93.51978171896317,
+    "Shoulder PCK": 90.16644021739131,
+    "Elbow PCK": 78.864814268217,
+    "Wrist PCK": 71.61233063208772,
+    "Hip PCK": 79.6780149943093,
+    "Knee PCK": 70.50262024122134,
+    "Ankle PCK": 62.588490712756474,
+    "PCK": 79.21155347384857,
+    "PCK@0.1": 16.245121140645068,
+    "PCK-AUC": 23.44430136203536
+}

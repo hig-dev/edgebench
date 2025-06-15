@@ -1,0 +1,15 @@
+{
+    "device_id": "beagleyai",
+    "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_onnx2tf.tflite",
+    "test_data_length": 2958,
+    "Head PCK": 94.61118690313779,
+    "Shoulder PCK": 91.64402173913044,
+    "Elbow PCK": 82.0178968603508,
+    "Wrist PCK": 74.86857726257497,
+    "Hip PCK": 83.43425103722305,
+    "Knee PCK": 74.35090770612375,
+    "Ankle PCK": 67.61917671590038,
+    "PCK": 82.13895394223263,
+    "PCK@0.1": 21.654956902348374,
+    "PCK-AUC": 25.808665107045062
+}

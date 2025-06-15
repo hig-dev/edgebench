@@ -1,0 +1,8 @@
+{
+    "device_id": "hailo",
+    "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light_v17.hef",
+    "iterations": 1000,
+    "avg_latency_ms": 40.70379614830017,
+    "avg_latency_ms_from_client": 40.59,
+    "energy_mWh": 45.0
+}

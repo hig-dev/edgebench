@@ -1,0 +1,15 @@
+{
+    "device_id": "workstation",
+    "model_name": "0-ViTPose-efficientvit_b1-mpii-256x256-light_aiedgetorch_int8.tflite",
+    "test_data_length": 2958,
+    "Head PCK": 49.420190995907234,
+    "Shoulder PCK": 38.756793478260875,
+    "Elbow PCK": 30.884390302855643,
+    "Wrist PCK": 22.84796735024336,
+    "Hip PCK": 35.71048460633466,
+    "Knee PCK": 19.542736645863883,
+    "Ankle PCK": 7.015296702021673,
+    "PCK": 31.904761904761905,
+    "PCK@0.1": 2.961228241596004,
+    "PCK-AUC": 7.298737985767974
+}

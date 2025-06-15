@@ -1,0 +1,8 @@
+{
+    "device_id": "workstation",
+    "model_name": "0-ViTPose-efficientvit_b1-mpii-256x256-light_aiedgetorch.tflite",
+    "iterations": 100,
+    "avg_latency_ms": 49.274818897247314,
+    "avg_latency_ms_from_client": 48.81,
+    "energy_mWh": 0.0
+}

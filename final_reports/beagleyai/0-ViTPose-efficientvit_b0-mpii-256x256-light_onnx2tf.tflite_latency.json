@@ -1,0 +1,8 @@
+{
+    "device_id": "beagleyai",
+    "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light_onnx2tf.tflite",
+    "iterations": 100,
+    "avg_latency_ms": 135.36216497421265,
+    "avg_latency_ms_from_client": 134.99,
+    "energy_mWh": 23.0
+}

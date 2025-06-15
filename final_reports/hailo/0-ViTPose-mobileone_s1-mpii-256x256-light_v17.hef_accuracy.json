@@ -1,0 +1,15 @@
+{
+    "device_id": "hailo",
+    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_v17.hef",
+    "test_data_length": 2958,
+    "Head PCK": 2.489768076398363,
+    "Shoulder PCK": 2.700407608695652,
+    "Elbow PCK": 0.18756783515505343,
+    "Wrist PCK": 0.0,
+    "Hip PCK": 0.05192107995846314,
+    "Knee PCK": 0.8651911468812877,
+    "Ankle PCK": 0.44877094217911345,
+    "PCK": 1.082487639864689,
+    "PCK@0.1": 0.044236274153835575,
+    "PCK-AUC": 0.18207129818907059
+}

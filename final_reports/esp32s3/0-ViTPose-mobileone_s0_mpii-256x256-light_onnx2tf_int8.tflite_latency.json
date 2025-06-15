@@ -1,0 +1,8 @@
+{
+    "device_id": "esp32s3",
+    "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_onnx2tf_int8.tflite",
+    "iterations": 10,
+    "avg_latency_ms": 13707.669043540955,
+    "avg_latency_ms_from_client": 13696.3,
+    "energy_mWh": 8.0
+}

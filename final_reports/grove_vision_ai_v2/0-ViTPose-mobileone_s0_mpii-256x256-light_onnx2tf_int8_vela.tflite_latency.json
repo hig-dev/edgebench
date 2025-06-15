@@ -1,0 +1,8 @@
+{
+    "device_id": "grove_vision_ai_v2",
+    "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_onnx2tf_int8_vela.tflite",
+    "iterations": 200,
+    "avg_latency_ms": 180.76285004615784,
+    "avg_latency_ms_from_client": 145.01,
+    "energy_mWh": 1.21
+}

@@ -1,0 +1,8 @@
+{
+    "device_id": "workstation",
+    "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light_onnx2tf.tflite",
+    "iterations": 100,
+    "avg_latency_ms": 72.88383960723877,
+    "avg_latency_ms_from_client": 72.46,
+    "energy_mWh": 0.0
+}

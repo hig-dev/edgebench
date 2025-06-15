@@ -1,0 +1,15 @@
+{
+    "device_id": "coralmicro",
+    "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light_onnx2tf_int8_edgetpu.tflite",
+    "test_data_length": 2958,
+    "Head PCK": 91.20054570259208,
+    "Shoulder PCK": 85.56385869565219,
+    "Elbow PCK": 75.09856578760828,
+    "Wrist PCK": 68.04870695242013,
+    "Hip PCK": 61.97009216351257,
+    "Knee PCK": 57.38652252498039,
+    "Ankle PCK": 54.250521846135996,
+    "PCK": 71.81368722352329,
+    "PCK@0.1": 14.44444437911664,
+    "PCK-AUC": 20.7661982479416
+}
