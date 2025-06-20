@@ -1,8 +1,6 @@
 #ifndef EDGE_BENCH_CLIENT_H
 #define EDGE_BENCH_CLIENT_H
 
-#define I2C_MASTER 1
-
 #include <string>
 #include <vector>
 #include "mqtt_topic.h"

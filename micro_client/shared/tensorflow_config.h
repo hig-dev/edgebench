@@ -20,7 +20,7 @@ static constexpr int kModelBufferSize = 1;
 static constexpr int kArenaSize = 1;
 #elif ESP32
 static constexpr int kModelBufferSize = 4488760;
-static constexpr int kArenaSize = 3200 * 1024;
+static constexpr int kArenaSize = 3241 * 1024;
 #elif CORALMICRO
 static constexpr int kModelBufferSize = 16040576;
 static constexpr int kArenaSize = 3403 * 1024;

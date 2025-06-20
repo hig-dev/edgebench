@@ -10,7 +10,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 add_compile_definitions(
   ESP32=1
-  I2C_MASTER=1
+  I2C_MASTER=0
   MOBILEONE=1
   EFFICIENTVIT=0
   DEIT=0
