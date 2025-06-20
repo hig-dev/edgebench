@@ -1,0 +1,15 @@
+{
+    "device_id": "grove_vision_ai_v2",
+    "model_name": "0-ViTPose-efficientvit_b1-mpii-256x256-light_onnx2tf_int8.tflite",
+    "test_data_length": 2958,
+    "Head PCK": 60.53888130968622,
+    "Shoulder PCK": 51.647418478260875,
+    "Elbow PCK": 38.622135816729454,
+    "Wrist PCK": 35.53199322997969,
+    "Hip PCK": 39.88231701295103,
+    "Knee PCK": 27.62416305744069,
+    "Ankle PCK": 19.839591582183935,
+    "PCK": 41.124121779859486,
+    "PCK@0.1": 4.634400201799222,
+    "PCK-AUC": 9.86554774439134
+}

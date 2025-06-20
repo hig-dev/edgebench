@@ -119,7 +119,7 @@ void EdgeBenchClient::startLatencyTest()
         quit_ = true;
         return;
     }
-    const int estimated_latency_ms = 260; // 150ms for mobileone_s0 or 260ms for effivientvit_b0
+    const int estimated_latency_ms = 750;
     int estimated_time_ms = iterations_ * estimated_latency_ms;
     vTaskDelay(estimated_time_ms / portTICK_PERIOD_MS);
     // Receive result from I2C device (ms)
