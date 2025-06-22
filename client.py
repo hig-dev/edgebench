@@ -17,6 +17,7 @@ class InterpreterType(IntEnum):
     ORT = 1
     HAILO = 2
     HHB = 3
+    DLR = 4
 
 
 class EdgeBenchClient:
@@ -134,6 +135,11 @@ class EdgeBenchClient:
             self.logger.log(
                 f"ORT interpreter initialized with model and providers: {self.ort_execution_providers}"
             )
+        elif self.interpreter_type == InterpreterType.DLR:
+            from dlr_interpreter import DLRInterpreter
+
+            self.interpreter = DLRInterpreter(model_path)
+            self.logger.log("DLR interpreter initialized with model")
         elif self.interpreter_type == InterpreterType.HAILO:
             from hailo_interpreter import HailoInterpreter
 
@@ -157,6 +163,7 @@ class EdgeBenchClient:
         if (
             self.interpreter_type == InterpreterType.HAILO
             or self.interpreter_type == InterpreterType.ORT
+            or self.interpreter_type == InterpreterType.DLR
             or self.interpreter_type == InterpreterType.HHB
         ):
             input_shape = self.interpreter.get_input_shape()
@@ -175,6 +182,7 @@ class EdgeBenchClient:
         if (
             self.interpreter_type == InterpreterType.HAILO
             or self.interpreter_type == InterpreterType.ORT
+            or self.interpreter_type == InterpreterType.DLR
             or self.interpreter_type == InterpreterType.HHB
         ):
             output_data = self.interpreter.get_output()
@@ -219,7 +227,7 @@ class EdgeBenchClient:
                         if self.interpreter_type == InterpreterType.ORT
                         else (
                             ".zip"
-                            if self.interpreter_type == InterpreterType.HHB
+                            if self.interpreter_type == InterpreterType.HHB or self.interpreter_type == InterpreterType.DLR 
                             else ".tflite"
                         )
                     )
@@ -306,6 +314,7 @@ def main():
     )
     parser.add_argument("--hailo", action="store_true", help="Use Hailo device")
     parser.add_argument("--hhb", action="store_true", help="Use HHB")
+    parser.add_argument("--dlr", action="store_true", help="Use NEO AI DLR Runtime")
     parser.add_argument("--ort", action="store_true", help="Use ONNX Runtime")
     parser.add_argument(
         "--ort-execution-providers",
@@ -320,7 +329,9 @@ def main():
         else (
             InterpreterType.ORT
             if args.ort
-            else (InterpreterType.HHB if args.hhb else InterpreterType.TFLITE)
+            else (InterpreterType.HHB if args.hhb else (
+                InterpreterType.DLR if args.dlr else InterpreterType.TFLITE
+            ))
         )
     )
     client = EdgeBenchClient(
