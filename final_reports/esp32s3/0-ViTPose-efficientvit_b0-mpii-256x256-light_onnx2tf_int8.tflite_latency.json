@@ -1,0 +1,8 @@
+{
+    "device_id": "esp32s3",
+    "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light_onnx2tf_int8.tflite",
+    "iterations": 1,
+    "avg_latency_ms": 337262.4886035919,
+    "avg_latency_ms_from_client": 337250.0,
+    "energy_mWh": 22.0
+}
