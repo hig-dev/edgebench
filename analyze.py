@@ -23,25 +23,14 @@ REPORTS_DIR = osp.join(
 
 
 TORCH_MODEL_SUMMARY_JSON_FILE = osp.join(REPORTS_DIR, "model_summary.json")
+IDLE_ENERGY_JSON_FILE = osp.join(REPORTS_DIR, "idle_energy.json")
 
 
 with open(TORCH_MODEL_SUMMARY_JSON_FILE, "r") as f:
     torch_model_summary = json.load(f)
 
-combined_reports = {}
-
-for model_name, report in combined_reports.items():
-    torch_model_name = model_name.replace("_int8", "")
-    torch_model_name = torch_model_name.replace("_onnx2tf", "")
-    torch_model_name = torch_model_name.replace("_aiedgetorch", "")
-    torch_model_name = torch_model_name.replace(".tflite", "")
-    if torch_model_name in torch_model_summary:
-        report["torch"] = torch_model_summary[torch_model_name]
-    else:
-        raise ValueError(f"Model {torch_model_name} not found in torch model summary")
-
-combined_reports = dict(sorted(combined_reports.items()))
-
+with open(IDLE_ENERGY_JSON_FILE, "r") as f:
+    idle_energy = json.load(f)
 
 def compare_metric(
     metric_key: str,
@@ -193,10 +182,40 @@ compare_metric(
     ),
     lambda report_a, report_b: report_a["model_name"].replace("-light", ""),
 )
-print("\Latency comparison between light head and classic head:")
+print("\nLatency comparison between light head and classic head:")
 compare_metric(
     "avg_latency_ms",
     format_latency,
+    lambda x: x.replace("-light", "-classic"),
+    (
+        "light_head",
+        dict([(k, v) for k, v in torch_model_summary.items() if "-light" in k]),
+    ),
+    (
+        "classic_head",
+        dict([(k, v) for k, v in torch_model_summary.items() if "-classic" in k]),
+    ),
+    lambda report_a, report_b: report_a["model_name"].replace("-light", ""),
+)
+print("\nPCK comparison between light head and classic head:")
+compare_metric(
+    "PCK",
+    format_accuracy,
+    lambda x: x.replace("-light", "-classic"),
+    (
+        "light_head",
+        dict([(k, v) for k, v in torch_model_summary.items() if "-light" in k]),
+    ),
+    (
+        "classic_head",
+        dict([(k, v) for k, v in torch_model_summary.items() if "-classic" in k]),
+    ),
+    lambda report_a, report_b: report_a["model_name"].replace("-light", ""),
+)
+print("\nPCK-AUC comparison between light head and classic head:")
+compare_metric(
+    "PCK-AUC",
+    format_accuracy,
     lambda x: x.replace("-light", "-classic"),
     (
         "light_head",
@@ -212,6 +231,9 @@ compare_metric(
 all_device_names = sorted([
     x for x in os.listdir(REPORTS_DIR) if os.path.isdir(os.path.join(REPORTS_DIR, x))
 ])
+all_device_names = ["esp32s3","coralmicro","grove_vision_ai_v2","rp5","beaglevahead", "beagleyai", "hailo"]
+
+
 print(f"\nAvailable devices: {all_device_names}")
 for model_name in models:
     print(f"\nComparison for {model_name} across devices:")
@@ -272,16 +294,18 @@ for metric_key, metric_name in [
     ("avg_latency_ms_from_client", "Latency (ms)"),
     ("PCK", "PCK"),
     ("PCK-AUC", "PCK-AUC"),
+    ("energy_mWh", "Energy (mWh)"),
 ]:
     print(f"\n{metric_name} comparison across devices:")
     table = PrettyTable()
     table.align = "l"
-    table.field_names = ["Model"] + all_device_names
-    for model_name in models:
-        row = [model_name]
-        for device_name in all_device_names:
+    table.field_names = ["Device"] + models
+    
+    for device_name in all_device_names:
+        row = [device_name]
+        for model_name in models:
             device_reports_dir = osp.join(REPORTS_DIR, device_name)
-            report_identifier = "_latency" if metric_key == "avg_latency_ms_from_client" else "_accuracy"
+            report_identifier = "_latency" if metric_key == "avg_latency_ms_from_client" or metric_key == "energy_mWh"  else "_accuracy"
             report_path = [
                 x
                 for x in os.listdir(device_reports_dir)
@@ -300,11 +324,80 @@ for metric_key, metric_name in [
                 value = -1
             if metric_key == "avg_latency_ms_from_client":
                 row.append(format_latency(value))
-            elif metric_key == "PCK":
-                row.append(format_accuracy(value))
-            elif metric_key == "PCK-AUC":
-                row.append(format_accuracy(value))
+            elif metric_key == "energy_mWh":
+                if value <= 0:
+                    row.append("DNF")
+                else:
+                    iterations = report.get("iterations", -1)
+                    if iterations <= 0:
+                        raise ValueError(
+                            f"Invalid iterations count {iterations} in report {report_path}"
+                        )
+                    row.append(f"{(value / iterations)*1000:.0f} μWh")
+            elif metric_key in ["PCK", "PCK-AUC"]:
+                # Find the torch model summary for the current model by model name
+                # The key should contain the model name
+                torch_report = next((
+                    (k, v)
+                    for k, v in torch_model_summary.items()
+                    if model_name in k and "light" in k
+                ), None)
+                torch_accuracy = torch_report[1][metric_key] if torch_report else -1
+                if torch_accuracy < 0:
+                    raise ValueError(
+                        f"Could not find torch model summary for {model_name} with key {metric_key}"
+                    )
+                accuracy_drop_percent = (
+                    (torch_accuracy - value) / torch_accuracy * 100
+                    if torch_accuracy > 0
+                    else 0
+                )
+                if value <= 0:
+                    row.append("DNF")
+                else:
+                    row.append(f"{format_accuracy(value)} ({accuracy_drop_percent:.2f}%)")
+                
             else:
                 raise ValueError(f"Unknown metric key: {metric_key}")
         table.add_row(row)
     print(table)
+
+print("\nPower comparison across devices:")
+table = PrettyTable()
+table.align = "l"
+table.field_names = ["Device", "Idle Power (W)", "Inference Power (W)"]
+for device_name in all_device_names:
+    idle_energy_value = idle_energy.get(device_name, -1)
+    # Calculate avg inference power
+    total_energy_used_Wh = 0
+    total_time_seconds = 0
+    for model_name in models:
+        device_reports_dir = osp.join(REPORTS_DIR, device_name)
+        report_path = [
+            x
+            for x in os.listdir(device_reports_dir)
+            if model_name in x and "_latency" in x
+        ]
+        report_path = (
+            osp.join(device_reports_dir, report_path[0])
+            if report_path
+            else None
+        )
+        if report_path and osp.exists(report_path):
+            with open(report_path, "r") as f:
+                report = json.load(f)
+            avg_latency_ms = report.get("avg_latency_ms_from_client", -1)
+            iterations = report.get("iterations", 1)
+            energy_mWh = report.get("energy_mWh", 0)
+            if avg_latency_ms > 0 and iterations > 0 and energy_mWh > 0:
+                avg_latency_seconds = avg_latency_ms / 1000
+                energy_Wh = energy_mWh / 1000
+                total_time_seconds += avg_latency_seconds * iterations
+                total_energy_used_Wh += energy_Wh
+    if total_time_seconds > 0:
+        avg_inference_power_W = total_energy_used_Wh * 3600 / total_time_seconds
+    else:
+        avg_inference_power_W = 0
+    table.add_row([device_name, f"{idle_energy_value:.2f} W", f"{avg_inference_power_W:.2f} W"])
+
+print(table)
