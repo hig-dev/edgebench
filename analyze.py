@@ -32,6 +32,7 @@ with open(TORCH_MODEL_SUMMARY_JSON_FILE, "r") as f:
 with open(IDLE_ENERGY_JSON_FILE, "r") as f:
     idle_energy = json.load(f)
 
+
 def compare_metric(
     metric_key: str,
     metric_formatter: Callable[[float], str],
@@ -135,7 +136,6 @@ def format_params(params: float) -> str:
     return f"{params/1e6:.2f} M"
 
 
-
 print("\nPeak memory usage comparison between light head and classic head:")
 compare_metric(
     "peak_memory_mb",
@@ -228,10 +228,18 @@ compare_metric(
     lambda report_a, report_b: report_a["model_name"].replace("-light", ""),
 )
 
-all_device_names = sorted([
-    x for x in os.listdir(REPORTS_DIR) if os.path.isdir(os.path.join(REPORTS_DIR, x))
-])
-all_device_names = ["esp32s3","coralmicro","grove_vision_ai_v2","rp5","beaglevahead", "beagleyai", "hailo"]
+all_device_names = sorted(
+    [x for x in os.listdir(REPORTS_DIR) if os.path.isdir(os.path.join(REPORTS_DIR, x))]
+)
+all_device_names = [
+    "esp32s3",
+    "coralmicro",
+    "grove_vision_ai_v2",
+    "rp5",
+    "beaglevahead",
+    "beagleyai",
+    "hailo",
+]
 
 
 print(f"\nAvailable devices: {all_device_names}")
@@ -300,21 +308,24 @@ for metric_key, metric_name in [
     table = PrettyTable()
     table.align = "l"
     table.field_names = ["Device"] + models
-    
+
     for device_name in all_device_names:
         row = [device_name]
         for model_name in models:
             device_reports_dir = osp.join(REPORTS_DIR, device_name)
-            report_identifier = "_latency" if metric_key == "avg_latency_ms_from_client" or metric_key == "energy_mWh"  else "_accuracy"
+            report_identifier = (
+                "_latency"
+                if metric_key == "avg_latency_ms_from_client"
+                or metric_key == "energy_mWh"
+                else "_accuracy"
+            )
             report_path = [
                 x
                 for x in os.listdir(device_reports_dir)
                 if model_name in x and report_identifier in x
             ]
             report_path = (
-                osp.join(device_reports_dir, report_path[0])
-                if report_path
-                else None
+                osp.join(device_reports_dir, report_path[0]) if report_path else None
             )
             if report_path and osp.exists(report_path):
                 with open(report_path, "r") as f:
@@ -337,11 +348,14 @@ for metric_key, metric_name in [
             elif metric_key in ["PCK", "PCK-AUC"]:
                 # Find the torch model summary for the current model by model name
                 # The key should contain the model name
-                torch_report = next((
-                    (k, v)
-                    for k, v in torch_model_summary.items()
-                    if model_name in k and "light" in k
-                ), None)
+                torch_report = next(
+                    (
+                        (k, v)
+                        for k, v in torch_model_summary.items()
+                        if model_name in k and "light" in k
+                    ),
+                    None,
+                )
                 torch_accuracy = torch_report[1][metric_key] if torch_report else -1
                 if torch_accuracy < 0:
                     raise ValueError(
@@ -355,8 +369,10 @@ for metric_key, metric_name in [
                 if value <= 0:
                     row.append("DNF")
                 else:
-                    row.append(f"{format_accuracy(value)} ({accuracy_drop_percent:.2f}%)")
-                
+                    row.append(
+                        f"{format_accuracy(value)} ({accuracy_drop_percent:.2f}%)"
+                    )
+
             else:
                 raise ValueError(f"Unknown metric key: {metric_key}")
         table.add_row(row)
@@ -365,13 +381,33 @@ for metric_key, metric_name in [
 print("\nPower comparison across devices:")
 table = PrettyTable()
 table.align = "l"
-table.field_names = ["Device", "Idle Power (W)", "Inference Power (W)"]
+table.field_names = [
+    "Device",
+    "Idle Power (W)",
+    "MobileOne Power (W)",
+    "EfficientViT Power (W)",
+    "Deit Power (W)",
+    "Avg Inference Power (W)",
+]
 for device_name in all_device_names:
     idle_energy_value = idle_energy.get(device_name, -1)
     # Calculate avg inference power
-    total_energy_used_Wh = 0
-    total_time_seconds = 0
+    total_energy_used_Wh_by_model = {
+        "mobileone": 0,
+        "efficientvit": 0,
+        "Deit": 0,
+    }
+    total_time_seconds_by_model = {
+        "mobileone": 0,
+        "efficientvit": 0,
+        "Deit": 0,
+    }
     for model_name in models:
+        key = (
+            "mobileone"
+            if "mobileone" in model_name
+            else ("efficientvit" if "efficientvit" in model_name else "Deit")
+        )
         device_reports_dir = osp.join(REPORTS_DIR, device_name)
         report_path = [
             x
@@ -379,9 +415,7 @@ for device_name in all_device_names:
             if model_name in x and "_latency" in x
         ]
         report_path = (
-            osp.join(device_reports_dir, report_path[0])
-            if report_path
-            else None
+            osp.join(device_reports_dir, report_path[0]) if report_path else None
         )
         if report_path and osp.exists(report_path):
             with open(report_path, "r") as f:
@@ -392,12 +426,26 @@ for device_name in all_device_names:
             if avg_latency_ms > 0 and iterations > 0 and energy_mWh > 0:
                 avg_latency_seconds = avg_latency_ms / 1000
                 energy_Wh = energy_mWh / 1000
-                total_time_seconds += avg_latency_seconds * iterations
-                total_energy_used_Wh += energy_Wh
-    if total_time_seconds > 0:
-        avg_inference_power_W = total_energy_used_Wh * 3600 / total_time_seconds
-    else:
-        avg_inference_power_W = 0
-    table.add_row([device_name, f"{idle_energy_value:.2f} W", f"{avg_inference_power_W:.2f} W"])
+                total_time_seconds_by_model[key] += avg_latency_seconds * iterations
+                total_energy_used_Wh_by_model[key] += energy_Wh
+
+    def get_avg_inference_power(energy_used_Wh: float, time_seconds: float) -> float:
+        if time_seconds > 0:
+            return energy_used_Wh * 3600 / time_seconds
+        else:
+            return 0
+
+    total_energy_used_Wh = sum(total_energy_used_Wh_by_model.values())
+    total_time_seconds = sum(total_time_seconds_by_model.values())
+    table.add_row(
+        [
+            device_name,
+            f"{idle_energy_value:.2f} W",
+            f"{get_avg_inference_power(total_energy_used_Wh_by_model['mobileone'], total_time_seconds_by_model['mobileone']):.2f} W",
+            f"{get_avg_inference_power(total_energy_used_Wh_by_model['efficientvit'], total_time_seconds_by_model['efficientvit']):.2f} W",
+            f"{get_avg_inference_power(total_energy_used_Wh_by_model['Deit'], total_time_seconds_by_model['Deit']):.2f} W",
+            f"{get_avg_inference_power(total_energy_used_Wh, total_time_seconds):.2f} W",
+        ]
+    )
 
 print(table)
