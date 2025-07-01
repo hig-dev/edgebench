@@ -1,8 +1,0 @@
-{
-    "device_id": "workstation",
-    "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light_onnx2tf.tflite",
-    "iterations": 100,
-    "avg_latency_ms": 25.842230319976807,
-    "avg_latency_ms_from_client": 25.36,
-    "energy_mWh": 0.0
-}

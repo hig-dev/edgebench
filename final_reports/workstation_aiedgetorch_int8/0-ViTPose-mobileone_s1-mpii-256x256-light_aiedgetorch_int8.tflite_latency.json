@@ -1,8 +1,0 @@
-{
-    "device_id": "workstation",
-    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_aiedgetorch_int8.tflite",
-    "iterations": 100,
-    "avg_latency_ms": 15.463953018188477,
-    "avg_latency_ms_from_client": 14.98,
-    "energy_mWh": 0.0
-}

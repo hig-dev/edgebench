@@ -232,6 +232,8 @@ all_device_names = sorted(
     [x for x in os.listdir(REPORTS_DIR) if os.path.isdir(os.path.join(REPORTS_DIR, x))]
 )
 all_device_names = [
+    "rtx5090", # NVIDIA RTX 5090 as a high-end desktop GPU
+    "ryzen7950x_onnxtf", # AMD Ryzen 7950X as a high-end CPU
     "esp32s3",
     "coralmicro",
     "grove_vision_ai_v2",
@@ -378,36 +380,57 @@ for metric_key, metric_name in [
         table.add_row(row)
     print(table)
 
+print("\nPower adjustment grove_vision_ai_v2 (with carrier board):")
+for model_name in models:
+    carrier_idle_watt = idle_energy.get("esp32s3", -1)
+    device_reports_dir = osp.join(REPORTS_DIR, "grove_vision_ai_v2")
+    report_path = [
+        x
+        for x in os.listdir(device_reports_dir)
+        if model_name in x and "_latency" in x
+    ]
+    report_path = (
+        osp.join(device_reports_dir, report_path[0]) if report_path else None
+    )
+    if not report_path or not osp.exists(report_path):
+        print(f"Report for {model_name} not found in grove_vision_ai_v2")
+        continue
+    with open(report_path, "r") as f:
+        report = json.load(f)
+    iterations = report.get("iterations", 1)
+    duration_ms = report.get("avg_latency_ms_from_client", -1) * iterations
+    energy_Wh = report.get("energy_mWh", -1) * 0.001
+    if duration_ms <= 0 or energy_Wh <= 0:
+        raise ValueError(
+            f"Invalid duration {duration_ms} ms or energy {energy_mWh} mWh in report {report_path}"
+        )
+    carrier_energy_Wh = carrier_idle_watt * (duration_ms / 1000) / 3600
+    adjusted_energy_Wh = energy_Wh + carrier_energy_Wh
+    adjusted_energy_per_inference_Wh = adjusted_energy_Wh / iterations
+    adjusted_energy_per_inference_microWh = adjusted_energy_per_inference_Wh * 1e6
+    print(
+        f"{model_name}: {adjusted_energy_per_inference_microWh:.0f} μWh (+{((carrier_energy_Wh/iterations)*1e6):.2f})"
+    )
+
+    
+
 print("\nPower comparison across devices:")
 table = PrettyTable()
 table.align = "l"
 table.field_names = [
     "Device",
     "Idle Power (W)",
-    "MobileOne Power (W)",
-    "EfficientViT Power (W)",
-    "Deit Power (W)",
     "Avg Inference Power (W)",
-]
+    "Variance",
+    "Std",
+    "Coefficient of Variation"
+] + models
 for device_name in all_device_names:
     idle_energy_value = idle_energy.get(device_name, -1)
     # Calculate avg inference power
-    total_energy_used_Wh_by_model = {
-        "mobileone": 0,
-        "efficientvit": 0,
-        "Deit": 0,
-    }
-    total_time_seconds_by_model = {
-        "mobileone": 0,
-        "efficientvit": 0,
-        "Deit": 0,
-    }
+    total_energy_used_Wh_by_model = { m : 0 for m in models }
+    total_time_seconds_by_model = { m : 0 for m in models }
     for model_name in models:
-        key = (
-            "mobileone"
-            if "mobileone" in model_name
-            else ("efficientvit" if "efficientvit" in model_name else "Deit")
-        )
         device_reports_dir = osp.join(REPORTS_DIR, device_name)
         report_path = [
             x
@@ -426,8 +449,8 @@ for device_name in all_device_names:
             if avg_latency_ms > 0 and iterations > 0 and energy_mWh > 0:
                 avg_latency_seconds = avg_latency_ms / 1000
                 energy_Wh = energy_mWh / 1000
-                total_time_seconds_by_model[key] += avg_latency_seconds * iterations
-                total_energy_used_Wh_by_model[key] += energy_Wh
+                total_time_seconds_by_model[model_name] += avg_latency_seconds * iterations
+                total_energy_used_Wh_by_model[model_name] += energy_Wh
 
     def get_avg_inference_power(energy_used_Wh: float, time_seconds: float) -> float:
         if time_seconds > 0:
@@ -435,17 +458,37 @@ for device_name in all_device_names:
         else:
             return 0
 
+    avg_inference_power_by_model = {
+        model_name: get_avg_inference_power(
+            total_energy_used_Wh_by_model[model_name],
+            total_time_seconds_by_model[model_name]
+        )
+        for model_name in models
+    }
     total_energy_used_Wh = sum(total_energy_used_Wh_by_model.values())
     total_time_seconds = sum(total_time_seconds_by_model.values())
+    average_inference_power = get_avg_inference_power(total_energy_used_Wh, total_time_seconds)
+    # Calculate variance using only valid models (non-zero avg inference power)
+    valid_models = [model_name for model_name in models if avg_inference_power_by_model[model_name] > 0]
+    if valid_models:
+        valid_avg = sum(avg_inference_power_by_model[m] for m in valid_models) / len(valid_models)
+        variance = sum(
+            (avg_inference_power_by_model[m] - valid_avg) ** 2 for m in valid_models
+        ) / len(valid_models)
+    else:
+        variance = 0
+    std = variance ** 0.5
+    coefficient_of_variation = std / average_inference_power if average_inference_power > 0 else 0
     table.add_row(
         [
             device_name,
             f"{idle_energy_value:.2f} W",
-            f"{get_avg_inference_power(total_energy_used_Wh_by_model['mobileone'], total_time_seconds_by_model['mobileone']):.2f} W",
-            f"{get_avg_inference_power(total_energy_used_Wh_by_model['efficientvit'], total_time_seconds_by_model['efficientvit']):.2f} W",
-            f"{get_avg_inference_power(total_energy_used_Wh_by_model['Deit'], total_time_seconds_by_model['Deit']):.2f} W",
-            f"{get_avg_inference_power(total_energy_used_Wh, total_time_seconds):.2f} W",
-        ]
+            f"{average_inference_power:.2f} W",
+            f"{variance:.4f} W^2",
+            f"{std:.2f} W",
+            f"{coefficient_of_variation:.4f}",
+        ] +
+        [f"{avg_inference_power_by_model[model_name]:.2f} W" for model_name in models]
     )
 
 print(table)

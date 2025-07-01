@@ -1,0 +1,8 @@
+{
+    "device_id": "ryzen7950x_onnxtf",
+    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_onnx2tf.tflite",
+    "iterations": 1000,
+    "avg_latency_ms": 6.569793224334717,
+    "avg_latency_ms_from_client": 6.568,
+    "energy_mWh": 147.78
+}

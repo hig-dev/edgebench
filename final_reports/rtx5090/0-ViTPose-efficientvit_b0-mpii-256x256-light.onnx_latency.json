@@ -1,0 +1,8 @@
+{
+    "device_id": "rtx5090",
+    "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light.onnx",
+    "iterations": 1000,
+    "avg_latency_ms": 6.076422691345215,
+    "avg_latency_ms_from_client": 6.074,
+    "energy_mWh": 104.60777777777776
+}

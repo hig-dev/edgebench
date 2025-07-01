@@ -1,0 +1,15 @@
+{
+    "device_id": "ryzen7950x",
+    "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light_onnx2tf.tflite",
+    "test_data_length": 2958,
+    "Head PCK": 95.77080491132332,
+    "Shoulder PCK": 93.88586956521739,
+    "Elbow PCK": 85.56353437717159,
+    "Wrist PCK": 78.9114583626845,
+    "Hip PCK": 85.75374018749119,
+    "Knee PCK": 79.75059395923564,
+    "Ankle PCK": 74.72832204851522,
+    "PCK": 85.60759823054904,
+    "PCK@0.1": 25.321363726563046,
+    "PCK-AUC": 27.69358581458293
+}

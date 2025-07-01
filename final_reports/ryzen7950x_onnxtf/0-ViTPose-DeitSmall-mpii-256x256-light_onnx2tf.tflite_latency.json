@@ -1,0 +1,8 @@
+{
+    "device_id": "ryzen7950x_onnxtf",
+    "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light_onnx2tf.tflite",
+    "iterations": 1000,
+    "avg_latency_ms": 32.411688804626465,
+    "avg_latency_ms_from_client": 32.41,
+    "energy_mWh": 828.2555555555554
+}

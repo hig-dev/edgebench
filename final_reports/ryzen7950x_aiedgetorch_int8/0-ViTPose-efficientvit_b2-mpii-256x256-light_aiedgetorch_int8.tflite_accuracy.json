@@ -1,0 +1,15 @@
+{
+    "device_id": "ryzen7950x",
+    "model_name": "0-ViTPose-efficientvit_b2-mpii-256x256-light_aiedgetorch_int8.tflite",
+    "test_data_length": 2958,
+    "Head PCK": 0.10231923601637108,
+    "Shoulder PCK": 0.0,
+    "Elbow PCK": 0.0,
+    "Wrist PCK": 0.017188037126160193,
+    "Hip PCK": 0.0,
+    "Knee PCK": 0.04024144869215292,
+    "Ankle PCK": 0.259868777033638,
+    "PCK": 0.044236273744470464,
+    "PCK@0.1": 0.0,
+    "PCK-AUC": 0.008495966674155583
+}

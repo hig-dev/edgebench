@@ -1,0 +1,15 @@
+{
+    "device_id": "rtx5090",
+    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light.onnx",
+    "test_data_length": 2958,
+    "Head PCK": 95.08867667121419,
+    "Shoulder PCK": 93.39334239130434,
+    "Elbow PCK": 83.60306062923135,
+    "Wrist PCK": 76.52845559381382,
+    "Hip PCK": 84.1613019678233,
+    "Knee PCK": 76.44607759551661,
+    "Ankle PCK": 69.64999771291377,
+    "PCK": 83.57793390580275,
+    "PCK@0.1": 23.28129096389778,
+    "PCK-AUC": 26.634959678314257
+}
