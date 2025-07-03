@@ -2,7 +2,7 @@
     "device_id": "rtx5090",
     "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light.onnx",
     "iterations": 1000,
-    "avg_latency_ms": 5.191266059875488,
-    "avg_latency_ms_from_client": 5.189,
-    "energy_mWh": 105.2213888888889
+    "avg_latency_ms": 5.605381488800049,
+    "avg_latency_ms_from_client": 5.603,
+    "energy_mWh": 236.5711111111111
 }

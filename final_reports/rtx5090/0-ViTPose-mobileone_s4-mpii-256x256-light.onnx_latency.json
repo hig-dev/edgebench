@@ -2,7 +2,7 @@
     "device_id": "rtx5090",
     "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light.onnx",
     "iterations": 1000,
-    "avg_latency_ms": 5.558878183364868,
-    "avg_latency_ms_from_client": 5.557,
-    "energy_mWh": 114.22722222222222
+    "avg_latency_ms": 5.644268274307251,
+    "avg_latency_ms_from_client": 5.643,
+    "energy_mWh": 246.09750000000003
 }
