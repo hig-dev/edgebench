@@ -142,6 +142,9 @@ class EdgeBenchClient:
             elif self.interpreter_type == InterpreterType.EXECUTORCH:
                 from interpreters.executorch_interpreter import ExecuTorchInterpreter
                 self.interpreter = ExecuTorchInterpreter(model_path)
+            elif self.interpreter_type == InterpreterType.TVM:
+                from interpreters.tvm_interpreter import TVMInterpreter
+                self.interpreter = TVMInterpreter(model_path, use_arm_compute_lib=True)
             elif self.interpreter_type == InterpreterType.TFLITE:
                 from interpreters.tflite_interpreter import TFLiteInterpreter
                 self.interpreter = TFLiteInterpreter(
@@ -257,6 +260,7 @@ def main():
     parser.add_argument("--hailo", action="store_true", help="Use Hailo device")
     parser.add_argument("--hhb", action="store_true", help="Use HHB")
     parser.add_argument("--executorch", action="store_true", help="Use Excecutorch")
+    parser.add_argument("--tvm", action="store_true", help="Use Apache TVM")
     parser.add_argument("--dlr", action="store_true", help="Use NEO AI DLR Runtime")
     parser.add_argument("--ort", action="store_true", help="Use ONNX Runtime")
     parser.add_argument(
@@ -272,6 +276,8 @@ def main():
         interpreter_type = InterpreterType.HHB
     elif args.executorch:
         interpreter_type = InterpreterType.EXECUTORCH
+    elif args.tvm:
+        interpreter_type = InterpreterType.TVM
     elif args.dlr:
         interpreter_type = InterpreterType.DLR
     elif args.ort:

@@ -11,6 +11,7 @@ class InterpreterType(IntEnum):
     HHB = 3
     DLR = 4
     EXECUTORCH = 5
+    TVM = 6
 
     def model_file_extension(self):
         if self == InterpreterType.TFLITE:
@@ -23,6 +24,8 @@ class InterpreterType(IntEnum):
             return ".zip"
         elif self == InterpreterType.EXECUTORCH:
             return ".pte"
+        elif self == InterpreterType.TVM:
+            return ".so"
         else:
             raise ValueError("Unknown interpreter type")
         
