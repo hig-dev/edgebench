@@ -115,40 +115,40 @@ class EdgeBenchClient:
                 f.write(model_bytes)
             self.logger.log(f"Model saved to {model_path}")
         
-        if self.interpreter_type == InterpreterType.ORT:
-            from interpreters.ort_interpreter import ORTInterpreter
+            if self.interpreter_type == InterpreterType.ORT:
+                from interpreters.ort_interpreter import ORTInterpreter
 
-            if (
-                not self.ort_execution_providers
-                or len(self.ort_execution_providers) == 0
-            ):
-                raise ValueError(
-                    "ORT execution providers must be specified for ORT interpreter"
+                if (
+                    not self.ort_execution_providers
+                    or len(self.ort_execution_providers) == 0
+                ):
+                    raise ValueError(
+                        "ORT execution providers must be specified for ORT interpreter"
+                    )
+
+                self.interpreter = ORTInterpreter(
+                    onnx_path=model_path,
+                    exection_providers=self.ort_execution_providers,
                 )
-
-            self.interpreter = ORTInterpreter(
-                onnx_path=model_path,
-                exection_providers=self.ort_execution_providers,
-            )
-        elif self.interpreter_type == InterpreterType.DLR:
-            from interpreters.dlr_interpreter import DLRInterpreter
-            self.interpreter = DLRInterpreter(model_path)
-        elif self.interpreter_type == InterpreterType.HAILO:
-            from interpreters.hailo_interpreter import HailoInterpreter
-            self.interpreter = HailoInterpreter(model_path)
-        elif self.interpreter_type == InterpreterType.HHB:
-            from interpreters.hhb_interpreter import HHBInterpreter
-            self.interpreter = HHBInterpreter(model_path)
-        elif self.interpreter_type == InterpreterType.EXECUTORCH:
-            from interpreters.executorch_interpreter import ExcecutorchInterpreter
-            self.interpreter = ExcecutorchInterpreter(model_path)
-        elif self.interpreter_type == InterpreterType.TFLITE:
-            from interpreters.tflite_interpreter import TFLiteInterpreter
-            self.interpreter = TFLiteInterpreter(
-                model_path=model_path, num_threads=self.threads
-            )
-        else:
-            raise ValueError(f"Unsupported interpreter type: {self.interpreter_type}")
+            elif self.interpreter_type == InterpreterType.DLR:
+                from interpreters.dlr_interpreter import DLRInterpreter
+                self.interpreter = DLRInterpreter(model_path)
+            elif self.interpreter_type == InterpreterType.HAILO:
+                from interpreters.hailo_interpreter import HailoInterpreter
+                self.interpreter = HailoInterpreter(model_path)
+            elif self.interpreter_type == InterpreterType.HHB:
+                from interpreters.hhb_interpreter import HHBInterpreter
+                self.interpreter = HHBInterpreter(model_path)
+            elif self.interpreter_type == InterpreterType.EXECUTORCH:
+                from interpreters.executorch_interpreter import ExecuTorchInterpreter
+                self.interpreter = ExecuTorchInterpreter(model_path)
+            elif self.interpreter_type == InterpreterType.TFLITE:
+                from interpreters.tflite_interpreter import TFLiteInterpreter
+                self.interpreter = TFLiteInterpreter(
+                    model_path=model_path, num_threads=self.threads
+                )
+            else:
+                raise ValueError(f"Unsupported interpreter type: {self.interpreter_type}")
         self.logger.log(
             f"Interpreter set up with type: {self.interpreter_type.name}, model path: {model_path}"
         )

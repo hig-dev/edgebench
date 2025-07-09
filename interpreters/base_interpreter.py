@@ -1,7 +1,7 @@
 from enum import IntEnum
 from abc import ABC, abstractmethod
 from typing import Optional
-from numpy import ndarray
+import numpy as np
 from numpy.typing import DTypeLike
 
 class InterpreterType(IntEnum):
@@ -36,11 +36,11 @@ class BaseInterpreter(ABC):
         pass
 
     @abstractmethod
-    def set_input(self, input_data: ndarray):
+    def set_input(self, input_data: np.ndarray):
         pass
 
     @abstractmethod
-    def get_output(self) -> Optional[ndarray]:
+    def get_output(self) -> Optional[np.ndarray]:
         pass
 
     @abstractmethod
@@ -50,7 +50,7 @@ class BaseInterpreter(ABC):
     def set_input_from_bytes(self, input_bytes: bytes):
         input_shape = self.get_input_shape()
         input_dtype = self.get_input_dtype()
-        input_data = ndarray.frombuffer(input_bytes, dtype=input_dtype)
+        input_data = np.frombuffer(input_bytes, dtype=input_dtype)
         input_data = input_data.reshape(input_shape)
         self.set_input(input_data)
 
