@@ -59,33 +59,18 @@ class EdgeBenchManager:
                 interpreter = tflite.Interpreter(model_path=model_path)
                 self.model_input_details[model_path] = interpreter.get_input_details()[0]
                 self.model_output_details[model_path] = interpreter.get_output_details()[0]
-            elif model_path.endswith(".hef"):
-                # TODO: Implement HEF model loading
-                # For now, we assume a fixed input/output shape and dtype
-                self.model_input_details[model_path] = {
-                    "shape": [1, 256, 256, 3],
-                    "dtype": np.float32,
-                }
-                self.model_output_details[model_path] = {
-                    "shape": [1, 64, 64, 16],
-                    "dtype": np.float32,
-                }
-            elif model_path.endswith(".onnx") or model_path.endswith(".zip"):
-                # TODO: Implement ONNX model loading
-                # For now, we assume a fixed input/output shape and dtype
-                is_nchw = "onnx2tf" not in model_path
-                self.model_input_details[model_path] = {
-                    "shape": [1, 3, 256, 256] if is_nchw else [1, 256, 256, 3],
-                    "dtype": np.float32,
-                }
-                self.model_output_details[model_path] = {
-                    "shape": [1, 16, 64, 64] if is_nchw else [1, 64, 64, 16],
-                    "dtype": np.float32,
-                }
             else:
-                raise ValueError(
-                    f"Unsupported model file type for {model_path}. Only .tflite and .hef are supported."
-                )
+                # TODO: Implement robust shape and dtype extraction for other formats
+                # For now, we assume a fixed shape and dtype for simplicity
+                is_nhwc = "onnx2tf" in model_path or model_path.endswith(".hef")
+                self.model_input_details[model_path] = {
+                    "shape": [1, 256, 256, 3] if is_nhwc else [1, 3, 256, 256],
+                    "dtype": np.float32,
+                }
+                self.model_output_details[model_path] = {
+                    "shape": [1, 64, 64, 16] if is_nhwc else [1, 16, 64, 64],
+                    "dtype": np.float32,
+                }
 
         # Setup callbacks
         self.client.on_connect = self.on_connect

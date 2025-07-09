@@ -1,24 +1,15 @@
 import argparse
-from enum import IntEnum
+from typing import Optional
 import uuid
-import numpy as np
 import time
 import paho.mqtt.client as mqtt
 import queue
 import tempfile
 
+from interpreters.base_interpreter import InterpreterType, BaseInterpreter
 from shared import TestMode, ClientStatus, Command, Topic, Logger
 
 BYTE_ORDER = "big"
-
-
-class InterpreterType(IntEnum):
-    TFLITE = 0
-    ORT = 1
-    HAILO = 2
-    HHB = 3
-    DLR = 4
-
 
 class EdgeBenchClient:
     def __init__(
@@ -46,7 +37,7 @@ class EdgeBenchClient:
         self.broker_port = broker_port
         self.iterations = 0
         self.mode = TestMode.NONE
-        self.interpreter = None
+        self.interpreter: Optional[BaseInterpreter] = None
         self.latency_input_bytes = None
         self.message_queue = queue.Queue()
 
@@ -116,9 +107,16 @@ class EdgeBenchClient:
         elapsed_time_ms = int(elapsed_time * 1000)
         self.send_result(elapsed_time_ms)
 
-    def setup_interpreter(self, model_path):
+    def setup_interpreter(self, model_bytes: bytes):
+        model_file_type = self.interpreter_type.model_file_extension()
+        with tempfile.NamedTemporaryFile(suffix=model_file_type) as temp_file:
+            model_path = temp_file.name
+            with open(model_path, "wb") as f:
+                f.write(model_bytes)
+            self.logger.log(f"Model saved to {model_path}")
+        
         if self.interpreter_type == InterpreterType.ORT:
-            from ort_interpreter import ORTInterpreter
+            from interpreters.ort_interpreter import ORTInterpreter
 
             if (
                 not self.ort_execution_providers
@@ -132,67 +130,29 @@ class EdgeBenchClient:
                 onnx_path=model_path,
                 exection_providers=self.ort_execution_providers,
             )
-            self.logger.log(
-                f"ORT interpreter initialized with model and providers: {self.ort_execution_providers}"
-            )
         elif self.interpreter_type == InterpreterType.DLR:
-            from dlr_interpreter import DLRInterpreter
-
+            from interpreters.dlr_interpreter import DLRInterpreter
             self.interpreter = DLRInterpreter(model_path)
-            self.logger.log("DLR interpreter initialized with model")
         elif self.interpreter_type == InterpreterType.HAILO:
-            from hailo_interpreter import HailoInterpreter
-
+            from interpreters.hailo_interpreter import HailoInterpreter
             self.interpreter = HailoInterpreter(model_path)
-            self.logger.log("Hailo interpreter initialized with model")
         elif self.interpreter_type == InterpreterType.HHB:
-            from hhb_interpreter import HHBInterpreter
-
+            from interpreters.hhb_interpreter import HHBInterpreter
             self.interpreter = HHBInterpreter(model_path)
-            self.logger.log("HHB interpreter initialized with model")
-        else:
-            from ai_edge_litert.interpreter import Interpreter as TfliteInterpreter
-
-            self.interpreter = TfliteInterpreter(
+        elif self.interpreter_type == InterpreterType.EXECUTORCH:
+            from interpreters.executorch_interpreter import ExcecutorchInterpreter
+            self.interpreter = ExcecutorchInterpreter(model_path)
+        elif self.interpreter_type == InterpreterType.TFLITE:
+            from interpreters.tflite_interpreter import TFLiteInterpreter
+            self.interpreter = TFLiteInterpreter(
                 model_path=model_path, num_threads=self.threads
             )
-            self.interpreter.allocate_tensors()
-            self.logger.log("Model loaded and tensors allocated")
-
-    def set_interpreter_input(self, input_bytes):
-        if (
-            self.interpreter_type == InterpreterType.HAILO
-            or self.interpreter_type == InterpreterType.ORT
-            or self.interpreter_type == InterpreterType.DLR
-            or self.interpreter_type == InterpreterType.HHB
-        ):
-            input_shape = self.interpreter.get_input_shape()
-            input_data = np.frombuffer(input_bytes, dtype=np.float32).reshape(
-                input_shape
-            )
-            self.interpreter.set_input(input_data)
         else:
-            input_details = self.interpreter.get_input_details()
-            latency_input = np.frombuffer(
-                input_bytes, dtype=input_details[0]["dtype"]
-            ).reshape(input_details[0]["shape"])
-            self.interpreter.set_tensor(input_details[0]["index"], latency_input)
+            raise ValueError(f"Unsupported interpreter type: {self.interpreter_type}")
+        self.logger.log(
+            f"Interpreter set up with type: {self.interpreter_type.name}, model path: {model_path}"
+        )
 
-    def get_interpreter_output(self):
-        if (
-            self.interpreter_type == InterpreterType.HAILO
-            or self.interpreter_type == InterpreterType.ORT
-            or self.interpreter_type == InterpreterType.DLR
-            or self.interpreter_type == InterpreterType.HHB
-        ):
-            output_data = self.interpreter.get_output()
-            output_bytes = output_data.flatten().tobytes()
-            return output_bytes
-        else:
-            output_details = self.interpreter.get_output_details()
-            output_data = self.interpreter.get_tensor(output_details[0]["index"])
-            output_bytes = output_data.flatten().tobytes()
-            return output_bytes
 
     def run(self):
         l = self.logger
@@ -219,36 +179,18 @@ class EdgeBenchClient:
             elif topic == t.MODEL():
                 model_bytes = payload
                 l.log(f"Received model, size: {len(model_bytes)} bytes")
-                model_file_type = (
-                    ".hef"
-                    if self.interpreter_type == InterpreterType.HAILO
-                    else (
-                        ".onnx"
-                        if self.interpreter_type == InterpreterType.ORT
-                        else (
-                            ".zip"
-                            if self.interpreter_type == InterpreterType.HHB or self.interpreter_type == InterpreterType.DLR 
-                            else ".tflite"
-                        )
-                    )
-                )
-                with tempfile.NamedTemporaryFile(suffix=model_file_type) as temp_file:
-                    model_path = temp_file.name
-                    with open(model_path, "wb") as f:
-                        f.write(model_bytes)
-                    l.log(f"Model saved to {model_path}")
-                    self.setup_interpreter(model_path)
+                self.setup_interpreter(model_bytes)
             elif topic == t.INPUT_LATENCY():
                 self.latency_input_bytes = payload
                 l.log(f"Received input, size: {len(payload)} bytes")
-                self.set_interpreter_input(self.latency_input_bytes)
+                self.interpreter.set_input_from_bytes(self.latency_input_bytes)
 
             elif topic == t.INPUT_ACCURACY():
                 input_bytes = payload
                 l.log(f"Received input, size: {len(input_bytes)} bytes")
-                self.set_interpreter_input(input_bytes)
+                self.interpreter.set_input_from_bytes(input_bytes)
                 self.interpreter.invoke()
-                output_bytes = self.get_interpreter_output()
+                output_bytes = self.interpreter.get_output_as_bytes()
                 self.client.publish(self.topic.RESULT_ACCURACY(), output_bytes, qos=1)
             elif topic == t.CMD():
                 cmd = Command.from_bytes(payload, byteorder=BYTE_ORDER)
@@ -314,6 +256,7 @@ def main():
     )
     parser.add_argument("--hailo", action="store_true", help="Use Hailo device")
     parser.add_argument("--hhb", action="store_true", help="Use HHB")
+    parser.add_argument("--executorch", action="store_true", help="Use Excecutorch")
     parser.add_argument("--dlr", action="store_true", help="Use NEO AI DLR Runtime")
     parser.add_argument("--ort", action="store_true", help="Use ONNX Runtime")
     parser.add_argument(
@@ -323,17 +266,23 @@ def main():
         help="ONNX Runtime execution providers (e.g., CPUExecutionProvider, ShlExecutionProvider)",
     )
     args = parser.parse_args()
-    interpreter_type = (
-        InterpreterType.HAILO
-        if args.hailo
-        else (
-            InterpreterType.ORT
-            if args.ort
-            else (InterpreterType.HHB if args.hhb else (
-                InterpreterType.DLR if args.dlr else InterpreterType.TFLITE
-            ))
-        )
-    )
+    if args.hailo:
+        interpreter_type = InterpreterType.HAILO
+    elif args.hhb:
+        interpreter_type = InterpreterType.HHB
+    elif args.executorch:
+        interpreter_type = InterpreterType.EXECUTORCH
+    elif args.dlr:
+        interpreter_type = InterpreterType.DLR
+    elif args.ort:
+        interpreter_type = InterpreterType.ORT
+        if not args.ort_execution_providers:
+            raise ValueError(
+                "ORT execution providers must be specified when using ONNX Runtime"
+            )
+    else:
+        interpreter_type = InterpreterType.TFLITE
+
     client = EdgeBenchClient(
         args.device,
         args.broker_host,

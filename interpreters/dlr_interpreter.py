@@ -1,11 +1,13 @@
 import numpy as np
-from typing import Any, Optional, Sequence
+from numpy.typing import DTypeLike
+from typing import Optional
+from interpreters.base_interpreter import BaseInterpreter
 import os
 import shutil
 import tempfile
 from dlr import DLRModel
 
-class DLRInterpreter:
+class DLRInterpreter(BaseInterpreter):
     def __init__(self, model_path: str, input_shape = (1, 256, 256, 3), output_shape = (1, 64, 64, 16)):
         if model_path.endswith('.zip'):
             if not os.path.exists(model_path):
@@ -17,7 +19,6 @@ class DLRInterpreter:
             self.model_path = model_path
         else:
             raise ValueError(f"Invalid model path: {model_path}. It should be a zip file or a directory.")
-    
         self.model = DLRModel(self.model_path, "cpu")
         self.input_name = self.model.get_input_name(0)
         self.output_name = self.model.get_output_name(0)
@@ -33,11 +34,11 @@ class DLRInterpreter:
         print(f"ORTInterpreter initialized with input name: {self.input_name}, output name: {self.output_name}, "
               f"input shape: {self.input_shape}, output shape: {self.output_shape}")
 
-    def get_input_shape(self) -> tuple:
+    def get_input_shape(self) -> tuple[int, ...]:
         return self.input_shape
     
-    def get_output_shape(self) -> tuple:
-        return self.output_shape
+    def get_input_dtype(self) -> DTypeLike:
+        return self.input_dtype
 
     def set_input(self, input_data: np.ndarray):
         self.input = input_data.copy()

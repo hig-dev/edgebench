@@ -1,5 +1,7 @@
 import numpy as np
+from numpy.typing import DTypeLike
 from typing import Optional
+from interpreters.base_interpreter import BaseInterpreter
 from hailo_platform import (
     HEF,
     VDevice,
@@ -11,7 +13,7 @@ from hailo_platform import (
     FormatType,
 )
 
-class HailoInterpreter:
+class HailoInterpreter(BaseInterpreter):
     def __init__(self, hef_path: str):
         self.target = VDevice()
         self.hef = HEF(hef_path)
@@ -26,20 +28,19 @@ class HailoInterpreter:
         self.input: Optional[np.ndarray] = None
         self.output: Optional[np.ndarray] = None
 
-    def get_input_shape(self, batch_size=1) -> tuple:
-        shape =  self.input_vstream_info.shape
-        return (batch_size, *shape)
+    def get_input_shape(self) -> tuple[int, ...]:
+        shape = self.input_vstream_info.shape
+        return (1, *shape)
     
-    def get_output_shape(self, batch_size=1) -> tuple:
-        shape = self.output_vstream_info.shape
-        return (batch_size, *shape)
+    def get_input_dtype(self) -> DTypeLike:
+        return self.input_vstream_info.dtype
 
     def set_input(self, input_data: np.ndarray):
         self.input = input_data.copy()
         if self.input.shape != self.get_input_shape():
             raise ValueError(f"Input shape {self.input.shape} does not match expected shape {self.get_input_shape()}")
-        if self.input.dtype != np.float32:
-            raise ValueError(f"Input dtype {self.input.dtype} is not float32")
+        if self.input.dtype != self.get_input_dtype():
+            raise ValueError(f"Input dtype {self.input.dtype} does not match expected dtype {self.get_input_dtype()}")
 
     def get_output(self) -> Optional[np.ndarray]:
         return self.output

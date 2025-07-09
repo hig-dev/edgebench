@@ -1,12 +1,14 @@
+from interpreters.base_interpreter import BaseInterpreter
 import ctypes
 from typing import Optional
 import numpy as np
+from numpy.typing import DTypeLike
 import os
 import shutil
 import tempfile
 
 
-class HHBInterpreter:
+class HHBInterpreter(BaseInterpreter):
     def __init__(self, model_zip_path: str):
         if not os.path.exists(model_zip_path):
             raise FileNotFoundError(f"Model zip file {model_zip_path} does not exist.")
@@ -28,13 +30,13 @@ class HHBInterpreter:
         self.input: Optional[np.ndarray] = None
         self.output: Optional[np.ndarray] = None
 
-    def get_input_shape(self) -> tuple:
+    def get_input_shape(self) -> tuple[int, ...]:
         # TODO: Replace with actual input shape retrieval logic
         return (1, 3, 256, 256)
-    def get_output_shape(self) -> tuple:
-        shape_np: np.ndarray = self.get_output_shape_by_index(0)
-        shape_tuple = tuple(shape_np.astype(np.int32))
-        return shape_tuple
+    
+    def get_input_dtype(self) -> DTypeLike:
+        # TODO: Replace with actual input dtype retrieval logic
+        return np.float32
 
     def set_input(self, input_data: np.ndarray):
         input = input_data.copy()
