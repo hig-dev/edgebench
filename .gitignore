@@ -1,6 +1,7 @@
 data/
 models/
 reports/
+plots/
 .vscode/
 .DS_Store
 .huskyrc.json
