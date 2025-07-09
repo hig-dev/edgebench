@@ -1,0 +1,15 @@
+{
+    "device_id": "rtx5090",
+    "model_name": "0-ViTPose-efficientvit_l2-mpii-256x256-light.onnx",
+    "test_data_length": 2958,
+    "Head PCK": 96.28240109140518,
+    "Shoulder PCK": 94.95584239130434,
+    "Elbow PCK": 88.68280688217426,
+    "Wrist PCK": 83.27790073955521,
+    "Hip PCK": 87.74443178778229,
+    "Knee PCK": 83.6586752151326,
+    "Ankle PCK": 79.14479710198285,
+    "PCK": 88.22534478272183,
+    "PCK@0.1": 29.300026026648098,
+    "PCK-AUC": 29.465925082304175
+}
