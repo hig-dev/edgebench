@@ -26,6 +26,9 @@ device_names = [
     "coralmicro",
     "grove_vision_ai_v2",
     "rp5",
+    #"rp5_ort",  # Raspberry Pi 5 with ONNX Runtime
+    #"rp5_executorch",  # Raspberry Pi 5 with Executorch
+    #"rp5_tvm",  # Raspberry Pi 5 with TVM
     "beaglevahead",
     "beagleyai",
     "hailo",
@@ -33,13 +36,27 @@ device_names = [
 
 display_names = {
     "rtx5090": "RTX 5090",
-    "esp32s3": "XIAO ESP32S3 Sense",
+    "esp32s3": "XIAO ESP32S3",
     "coralmicro": "Coral Dev Board Micro",
     "grove_vision_ai_v2": "Grove Vision AI V2",
     "rp5": "Raspberry Pi 5",
     "beaglevahead": "BeagleV-Ahead",
     "beagleyai": "BeagleY-AI",
     "hailo": "Raspberry Pi AI HAT+",
+    "rp5_ort": "Raspberry Pi 5 (ONNX Runtime)",
+    "rp5_executorch": "Raspberry Pi 5 (Executorch)",
+    "rp5_tvm": "Raspberry Pi 5 (TVM)",
+}
+
+model_display_names = {
+    "mobileone_s0": "P-MobileOne-S0-L",
+    "mobileone_s1": "P-MobileOne-S1-L",
+    "mobileone_s4": "P-MobileOne-S4-L",
+    "efficientvit_b0": "P-EfficientViT-B0-L",
+    "efficientvit_b1": "P-EfficientViT-B1-L",
+    "efficientvit_b2": "P-EfficientViT-B2-L",
+    "DeitTiny": "P-DeiT-Tiny-L",
+    "DeitSmall": "P-DeiT-Small-L",
 }
 
 REPORTS_DIR = osp.join(
@@ -173,7 +190,7 @@ def compare_metric(
 
 
 def format_latency(latency: float) -> str:
-    return f"{latency:.2f} ms" if latency >= 0 else "DNF"
+    return f"{round(latency):.0f}" if latency >= 0 else "DNF"
 
 
 def format_accuracy(accuracy: float) -> str:
@@ -284,6 +301,85 @@ compare_metric(
     lambda report_a, report_b: report_a["model_name"].replace("-light", ""),
 )
 
+print(f"\nModel summary for light and classic heads:")
+table = PrettyTable()
+table.align = "l"
+table.field_names = [
+    "Model",
+    "Params (M)",
+    "FLOPs (G)",
+    "Peak Memory (MB)",
+    "PCK",
+    "PCK-AUC",
+]
+for model_name in models:
+    for head_type in ["light", "classic"]:
+        torch_report = next(
+            (
+                (k, v)
+                for k, v in torch_model_summary.items()
+                if model_name in k and head_type in k
+            ),
+            None,
+        )
+        if not torch_report:
+            raise ValueError(
+                f"Could not find torch model summary for {model_name} with head type {head_type}"
+            )
+        model_key, report = torch_report
+        name = model_display_names.get(model_name, "")
+        if head_type == "classic":
+            name = name.replace("-L", "-C")
+        table.add_row(
+            [
+                name,
+                format_params(report["params"]),
+                format_flops(report["flops"]),
+                format_peak_memory(report["peak_memory_mb"]),
+                format_accuracy(report["PCK"]),
+                format_accuracy(report["PCK-AUC"]),
+            ]
+        )
+
+print(table)
+print(table.get_latex_string())
+
+print(f"\nComparison between onnx2tf and aiedgetorch conversion:")
+table = PrettyTable()
+table.align = "l"
+table.field_names = [
+    "Model",
+    "Latency (aiedgetorch) (ms)",
+    "Latency (onnx2tf) (ms)",
+    "Latency Diff (%)",
+]
+latency_diff_percentages = []
+for model_name in models:
+    onnx2tf_report = get_latency_report("rp5", model_name)
+    aiedgetorch_report = get_latency_report("rp5_aiedgetorch", model_name)
+    if not onnx2tf_report or not aiedgetorch_report:
+        print(f"Report for {model_name} not found in rp5 or rp5_aiedgetorch")
+        continue
+    onnx2tf_latency = onnx2tf_report.get("avg_latency_ms_from_client", -1)
+    aiedgetorch_latency = aiedgetorch_report.get("avg_latency_ms_from_client", -1)
+    if onnx2tf_latency < 0 or aiedgetorch_latency < 0:
+        print(f"Invalid latency for {model_name} in rp5 or rp5_aiedgetorch")
+        continue
+    latency_diff_percentage = (
+        (onnx2tf_latency - aiedgetorch_latency) / aiedgetorch_latency * 100
+    )
+    latency_diff_percentages.append(latency_diff_percentage)
+    table.add_row(
+        [
+            model_display_names.get(model_name, model_name),
+            format_latency(aiedgetorch_latency),
+            format_latency(onnx2tf_latency),
+            f"{latency_diff_percentage:.2f}%",
+        ]
+    )
+print(table)
+print("Average latency difference percentage:", np.mean(latency_diff_percentages))
+print(table.get_latex_string())
 
 print(f"\nAvailable devices: {device_names}")
 for model_name in models:
@@ -305,7 +401,7 @@ for model_name in models:
 
         table.add_row(
             [
-                device_name,
+                display_names.get(device_name, device_name),
                 format_latency(latency_report["avg_latency_ms_from_client"]),
                 format_accuracy(accuracy_report["PCK"]),
                 format_accuracy(accuracy_report["PCK-AUC"]),
@@ -326,7 +422,7 @@ for metric_key, metric_name in [
     table.field_names = ["Device"] + models
 
     for device_name in device_names:
-        row = [device_name]
+        row = [display_names.get(device_name, device_name)]
         for model_name in models:
             if metric_key == "avg_latency_ms_from_client" or metric_key == "energy_mWh":
                 report = get_latency_report(device_name, model_name)
@@ -349,7 +445,7 @@ for metric_key, metric_name in [
                         raise ValueError(
                             f"Invalid iterations count {iterations}"
                         )
-                    row.append(f"{(value / iterations)*1000:.0f} μWh")
+                    row.append(f"{(value / iterations)*1000:.0f}")
             elif metric_key in ["PCK", "PCK-AUC"]:
                 # Find the torch model summary for the current model by model name
                 # The key should contain the model name
@@ -382,6 +478,7 @@ for metric_key, metric_name in [
                 raise ValueError(f"Unknown metric key: {metric_key}")
         table.add_row(row)
     print(table)
+    print(table.get_latex_string())
 
 print("\nPower adjustment grove_vision_ai_v2 (with carrier board):")
 for model_name in models:
@@ -465,7 +562,7 @@ for device_name in device_names:
     coefficient_of_variation = std / average_inference_power if average_inference_power > 0 else 0
     table.add_row(
         [
-            device_name,
+            display_names.get(device_name, device_name),
             f"{idle_energy_value:.2f} W",
             f"{average_inference_power:.2f} W",
             f"{variance:.4f} W^2",
@@ -578,7 +675,7 @@ for device_name in device_names:
         f"{latency_score:.2f}",
         f"{energy_score:.0f}",
         f"{total_score:.0f}",
-        best_model,
+        model_display_names.get(best_model, best_model)
     ])
 
 print(table)
