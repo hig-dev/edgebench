@@ -1,0 +1,15 @@
+{
+    "device_id": "rp5_executorch",
+    "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light.pte",
+    "test_data_length": 2958,
+    "Head PCK": 3.8540245566166442,
+    "Shoulder PCK": 6.0971467391304355,
+    "Elbow PCK": 3.5453934845713517,
+    "Wrist PCK": 2.5015344784510853,
+    "Hip PCK": 4.431323944391229,
+    "Knee PCK": 2.8208800827564255,
+    "Ankle PCK": 2.527453402012859,
+    "PCK": 4.754098360655738,
+    "PCK@0.1": 0.24460057515516245,
+    "PCK-AUC": 0.8790658337480499
+}

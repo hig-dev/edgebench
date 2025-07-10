@@ -1,0 +1,8 @@
+{
+    "device_id": "rp5_tvm",
+    "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_v17.onnx",
+    "iterations": 100,
+    "avg_latency_ms": 56.22918128967285,
+    "avg_latency_ms_from_client": 56.2,
+    "energy_mWh": 12.0
+}

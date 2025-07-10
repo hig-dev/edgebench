@@ -1,0 +1,8 @@
+{
+    "device_id": "rp5_tvm",
+    "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light_v17.onnx",
+    "iterations": 100,
+    "avg_latency_ms": 42.63793468475342,
+    "avg_latency_ms_from_client": 42.61,
+    "energy_mWh": 8.0
+}

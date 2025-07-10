@@ -1,0 +1,15 @@
+{
+    "device_id": "rp5_ort",
+    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light.onnx",
+    "test_data_length": 2958,
+    "Head PCK": 95.08867667121419,
+    "Shoulder PCK": 93.39334239130434,
+    "Elbow PCK": 83.62011383523406,
+    "Wrist PCK": 76.54553209654605,
+    "Hip PCK": 84.14399494117049,
+    "Knee PCK": 76.4864327206175,
+    "Ankle PCK": 69.6972344107183,
+    "PCK": 83.59094457455113,
+    "PCK@0.1": 23.286495297407377,
+    "PCK-AUC": 26.636299835291222
+}

@@ -1,0 +1,8 @@
+{
+    "device_id": "rp5_ort",
+    "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light.onnx",
+    "iterations": 100,
+    "avg_latency_ms": 254.53976154327393,
+    "avg_latency_ms_from_client": 254.51,
+    "energy_mWh": 55.0
+}

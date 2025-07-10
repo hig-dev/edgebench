@@ -1,0 +1,8 @@
+{
+    "device_id": "rp5_aiedgetorch",
+    "model_name": "0-ViTPose-efficientvit_b2-mpii-256x256-light_aiedgetorch.tflite",
+    "iterations": 100,
+    "avg_latency_ms": 123.05182695388794,
+    "avg_latency_ms_from_client": 122.57,
+    "energy_mWh": 0.0
+}

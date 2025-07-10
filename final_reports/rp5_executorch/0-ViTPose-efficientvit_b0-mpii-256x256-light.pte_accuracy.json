@@ -1,0 +1,15 @@
+{
+    "device_id": "rp5_executorch",
+    "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light.pte",
+    "test_data_length": 2958,
+    "Head PCK": 93.11050477489769,
+    "Shoulder PCK": 90.25135869565219,
+    "Elbow PCK": 78.08076770221558,
+    "Wrist PCK": 68.89002849645061,
+    "Hip PCK": 80.50891407756424,
+    "Knee PCK": 70.13925360070024,
+    "Ankle PCK": 63.06014367364061,
+    "PCK": 78.72495446265938,
+    "PCK@0.1": 17.473328317989136,
+    "PCK-AUC": 23.558339862491085
+}

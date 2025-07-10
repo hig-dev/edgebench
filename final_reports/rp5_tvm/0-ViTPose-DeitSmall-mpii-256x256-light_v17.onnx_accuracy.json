@@ -1,0 +1,15 @@
+{
+    "device_id": "rp5_tvm",
+    "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light_v17.onnx",
+    "test_data_length": 2958,
+    "Head PCK": 93.65620736698499,
+    "Shoulder PCK": 89.77581521739131,
+    "Elbow PCK": 79.44450125618505,
+    "Wrist PCK": 72.69417316149054,
+    "Hip PCK": 80.8205064774304,
+    "Knee PCK": 74.63202946492514,
+    "Ankle PCK": 68.06736751913621,
+    "PCK": 80.66094197241739,
+    "PCK@0.1": 21.150143088420915,
+    "PCK-AUC": 25.292844138552624
+}
