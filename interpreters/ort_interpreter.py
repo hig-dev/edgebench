@@ -13,7 +13,19 @@ class ORTInterpreter(BaseInterpreter):
         self.output_name = self.session.get_outputs()[0].name
         self.input_shape = tuple(self.session.get_inputs()[0].shape)
         self.output_shape = tuple(self.session.get_outputs()[0].shape)
-        self.input_dtype = self.session.get_inputs()[0].dtype
+        onnx_type = self.session.get_inputs()[0].type
+        if 'float' in onnx_type:
+            self.input_dtype = np.float32
+        elif 'int64' in onnx_type:
+            self.input_dtype = np.int64
+        elif 'int32' in onnx_type:
+            self.input_dtype = np.int32
+        elif 'int8' in onnx_type:
+            self.input_dtype = np.int8
+        elif 'uint8' in onnx_type:
+            self.input_dtype = np.uint8
+        else:
+            raise ValueError(f"Unsupported ONNX input type: {onnx_type}")
         self.input: Optional[np.ndarray] = None
         self.output: Optional[np.ndarray] = None
         print(f"ORTInterpreter initialized with input name: {self.input_name}, output name: {self.output_name}, "

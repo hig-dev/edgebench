@@ -25,7 +25,7 @@ class InterpreterType(IntEnum):
         elif self == InterpreterType.EXECUTORCH:
             return ".pte"
         elif self == InterpreterType.TVM:
-            return ".so"
+            return ".onnx"
         else:
             raise ValueError("Unknown interpreter type")
         

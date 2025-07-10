@@ -40,7 +40,7 @@ class ExecuTorchInterpreter(BaseInterpreter):
             raise ValueError(f"Unsupported dtype scalar {dtype_scalar} in ExecuTorchInterpreter.")
 
     def set_input(self, input_data: np.ndarray):
-        self.input = torch.from_numpy(input_data)
+        self.input = torch.from_numpy(input_data.copy())
         if self.input.shape != self.get_input_shape():
             raise ValueError(f"Input shape {self.input.shape} does not match expected shape {self.get_input_shape()}")
 

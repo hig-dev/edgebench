@@ -1,4 +1,4 @@
-from base_interpreter import BaseInterpreter
+from interpreters.base_interpreter import BaseInterpreter
 from typing import Optional
 import numpy as np
 from numpy.typing import DTypeLike
@@ -14,7 +14,15 @@ class TVMInterpreter(BaseInterpreter):
         print(f"Initializing TVMInterpreter with model at {model_path}.")
         if not model_path.endswith(".onnx"):
             raise ValueError(f"Model path must end with .onnx, got {model_path}")
-        self.executor = self.compile_model(model_path, use_arm_compute_lib)
+        try:
+            self.executor = self.compile_model(model_path, use_arm_compute_lib)
+        except Exception as e:
+            if use_arm_compute_lib:
+                print("Failed to compile model with ARM Compute Library, retrying without it.")
+                self.executor = self.compile_model(model_path, use_arm_compute_lib=False)
+            else:
+                raise e
+        
         self.input: Optional[np.ndarray] = None
         self.output: Optional[np.ndarray] = None
 
@@ -60,7 +68,7 @@ class TVMInterpreter(BaseInterpreter):
             raise ValueError(
                 f"Input dtype {input_data.dtype} does not match expected dtype {self.get_input_dtype()}"
             )
-        self.input = tvm.nd.array(input_data.astype(self.get_input_dtype()))
+        self.input = tvm.nd.array(input_data.copy().astype(self.get_input_dtype()))
 
     def get_output(self) -> Optional[np.ndarray]:
         return self.output.numpy()
