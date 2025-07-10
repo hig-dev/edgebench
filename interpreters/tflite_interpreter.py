@@ -7,7 +7,6 @@ from ai_edge_litert.interpreter import Interpreter
 
 class TFLiteInterpreter(BaseInterpreter):
     def __init__(self, model_path: str, num_threads: Optional[int] = None):
-        super().__init__(model_path)
         self.interpreter = Interpreter(model_path, num_threads=num_threads)
         self.interpreter.allocate_tensors()
         self.output = None
