@@ -448,7 +448,7 @@ def main():
     )
     parser.add_argument(
         "--data-dir",
-        default=os.path.join(os.path.dirname(__file__), "data"),
+        default=os.path.join(os.path.dirname(__file__), "test_data"),
         help="Data directory",
     )
     parser.add_argument(

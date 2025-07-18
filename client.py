@@ -267,7 +267,7 @@ def main():
         "--ort-execution-providers",
         nargs="+",
         default=[],
-        help="ONNX Runtime execution providers (e.g., CPUExecutionProvider, ShlExecutionProvider)",
+        help="ONNX Runtime execution providers (e.g., CPUExecutionProvider)",
     )
     args = parser.parse_args()
     if args.hailo:
