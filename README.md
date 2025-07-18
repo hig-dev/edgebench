@@ -56,7 +56,30 @@ edgebench/
    pip install -r requirements.txt
    ```
 
-3. Set up MQTT broker (if not using external broker):
+3. (optional) Install additional inference framework for client
+   ```bash
+   # For ONNX Runtime
+   pip install onnxruntime
+   # For ONNX Runtime with GPU support
+   pip install onnxruntime-gpu
+   
+   # For ExecuTorch
+   pip install torch
+   pip install executorch
+   
+   # For Apache TVM
+   pip install apache-tvm
+   pip install onnx 
+   
+   # For NEO AI DLR
+   pip install dlr
+   
+   # For Hailo RT
+   # see https://hailo.ai/developer-zone/documentation/hailort/latest/
+   
+   ```
+
+4. Set up MQTT broker (if not using external broker):
    ```bash
    # Install mosquitto or use Docker
    docker run -it -p 1883:1883 eclipse-mosquitto

@@ -6,7 +6,6 @@ import tvm
 from tvm import relay, transform
 from tvm.relay.op.contrib.arm_compute_lib import partition_for_arm_compute_lib
 import onnx
-import time
 
 
 class TVMInterpreter(BaseInterpreter):
