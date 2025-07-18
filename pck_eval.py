@@ -5,18 +5,24 @@ import os.path as osp
 
 from mmpose_eval import decode_heatmap, compute_metrics
 
+SAMPLE_INPUT_NCHW_FILE_NAME = "sample_input_nchw.npy"
+MODEL_INPUTS_FILE_NAME = "model_inputs.npy"
+GT_KEYPOINTS_FILE_NAME = "gt_keypoints.npy"
+GT_KEYPOINTS_VISIBLE_MASK_FILE_NAME = "gt_keypoints_visible_mask.npy"
+GT_HEAD_SIZES_FILE_NAME = "gt_head_sizes.npy"
+META_INFOS_FILE_NAME = "meta_infos.json"
 
 class PckEvaluator:
     def __init__(self, ground_truth_dir: str, model_output_details, limit: int = 0):
         self.model_output_details = model_output_details
         self.limit = limit
-        self.gt_keypoints = np.load(osp.join(ground_truth_dir, "gt_keypoints.npy"))
+        self.gt_keypoints = np.load(osp.join(ground_truth_dir, GT_KEYPOINTS_FILE_NAME))
         self.num_keypoints = self.gt_keypoints.shape[1]
         self.gt_keypoints_visible_mask = np.load(
-            osp.join(ground_truth_dir, "gt_keypoints_visible_mask.npy")
+            osp.join(ground_truth_dir, GT_KEYPOINTS_VISIBLE_MASK_FILE_NAME)
         )
-        self.gt_head_sizes = np.load(osp.join(ground_truth_dir, "gt_head_sizes.npy"))
-        with open(osp.join(ground_truth_dir, "meta_infos.json"), "rt") as f:
+        self.gt_head_sizes = np.load(osp.join(ground_truth_dir, GT_HEAD_SIZES_FILE_NAME))
+        with open(osp.join(ground_truth_dir, META_INFOS_FILE_NAME), "rt") as f:
             self.meta_infos = json.load(f)
         self.pred_keypoints = []
         if limit > 0:

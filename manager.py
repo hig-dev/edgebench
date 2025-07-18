@@ -6,15 +6,23 @@ import queue
 import uuid
 import numpy as np
 import ai_edge_litert.interpreter as tflite
-from io import BytesIO
 import paho.mqtt.client as mqtt
-from pck_eval import PckEvaluator
+from pck_eval import (
+    PckEvaluator,
+    SAMPLE_INPUT_NCHW_FILE_NAME,
+    MODEL_INPUTS_FILE_NAME,
+    GT_KEYPOINTS_FILE_NAME,
+    GT_KEYPOINTS_VISIBLE_MASK_FILE_NAME,
+    GT_HEAD_SIZES_FILE_NAME,
+    META_INFOS_FILE_NAME,
+)
 from shared import TestMode, ClientStatus, Command, Topic, Logger
 from typing import Dict
 from fastcrc import crc16
 
 BYTE_ORDER = "big"
 CHUNK_SIZE = 196608
+
 
 class EdgeBenchManager:
     def __init__(
@@ -48,7 +56,7 @@ class EdgeBenchManager:
         self.topic = Topic(device_id)
         self.message_queue = queue.Queue()
         self.latency_input: np.ndarray = np.load(
-            os.path.join(data_dir, "sample_input_nchw.npy")
+            os.path.join(data_dir, SAMPLE_INPUT_NCHW_FILE_NAME)
         )
 
         # Get model input details
@@ -57,8 +65,12 @@ class EdgeBenchManager:
         for model_path in model_paths:
             if model_path.endswith(".tflite"):
                 interpreter = tflite.Interpreter(model_path=model_path)
-                self.model_input_details[model_path] = interpreter.get_input_details()[0]
-                self.model_output_details[model_path] = interpreter.get_output_details()[0]
+                self.model_input_details[model_path] = interpreter.get_input_details()[
+                    0
+                ]
+                self.model_output_details[model_path] = (
+                    interpreter.get_output_details()[0]
+                )
             else:
                 # TODO: Implement robust shape and dtype extraction for other formats
                 # For now, we assume a fixed shape and dtype for simplicity
@@ -340,7 +352,7 @@ class EdgeBenchManager:
             self.wait_for_status(ClientStatus.READY_FOR_TASK)
 
             # Load test data
-            test_data = np.load(os.path.join(self.data_dir, "model_inputs.npy"))
+            test_data = np.load(os.path.join(self.data_dir, MODEL_INPUTS_FILE_NAME))
             l.log(f"Loaded test data with shape {test_data.shape}")
             if limit > 0:
                 test_data = test_data[:limit]
@@ -386,6 +398,34 @@ class EdgeBenchManager:
                 self.disconnect()
             else:
                 self.send_command(Command.RESET)
+
+
+def check_data_dir(data_dir: str, latency: bool = True, accuracy: bool = True):
+    required_files_for_latency = [
+        SAMPLE_INPUT_NCHW_FILE_NAME,
+    ]
+    required_files_for_accuracy = [
+        MODEL_INPUTS_FILE_NAME,
+        GT_KEYPOINTS_FILE_NAME,
+        GT_KEYPOINTS_VISIBLE_MASK_FILE_NAME,
+        GT_HEAD_SIZES_FILE_NAME,
+        META_INFOS_FILE_NAME,
+    ]
+    addtional_help = "Use https://github.com/hig-dev/mmpose/blob/main/export_test_data.py to generate the required files."
+    if latency:
+        for file_name in required_files_for_latency:
+            file_path = os.path.join(data_dir, file_name)
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(
+                    f"Required file for latency test not found: {file_path}\n{addtional_help}"
+                )
+    if accuracy:
+        for file_name in required_files_for_accuracy:
+            file_path = os.path.join(data_dir, file_name)
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(
+                    f"Required file for accuracy test not found: {file_path}\n{addtional_help}"
+                )
 
 
 def main():
@@ -440,7 +480,9 @@ def main():
         default=0,
         help="Limit for accuracy test (0 for no limit)",
     )
-    parser.add_argument("--skip-send-model", action="store_true", help="Skip sending model")
+    parser.add_argument(
+        "--skip-send-model", action="store_true", help="Skip sending model"
+    )
     parser.add_argument("--latency", action="store_true", help="Run latency test")
     parser.add_argument("--accuracy", action="store_true", help="Run accuracy test")
     args = parser.parse_args()
@@ -474,6 +516,12 @@ def main():
     print(f"Found {len(model_paths)} models after filtering:")
     for model_path in model_paths:
         print(f"  - {os.path.basename(model_path)}")
+
+    check_data_dir(
+        args.data_dir,
+        latency=args.latency,
+        accuracy=args.accuracy,
+    )
 
     manager = EdgeBenchManager(
         device_id=args.device,
