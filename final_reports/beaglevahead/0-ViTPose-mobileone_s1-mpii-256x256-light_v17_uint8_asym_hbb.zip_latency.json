@@ -1,8 +1,30 @@
 {
     "device_id": "beaglevahead",
-    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_v17_uint8_asym_hbb.zip",
+    "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_v17_uint8_asym_hhb.zip",
     "iterations": 1000,
-    "avg_latency_ms": 28.532965183258057,
-    "avg_latency_ms_from_client": 28.522,
-    "avg_energy_mWh": 34.0
+    "runs": 5,
+    "avg_latency_ms": 28.504611873626708,
+    "avg_latency_ms_from_client": 28.494800000000005,
+    "avg_energy_mWh": 31.8,
+    "latency_ms_per_run": [
+        28.51722288131714,
+        28.475887537002563,
+        28.479299306869507,
+        28.54731035232544,
+        28.503339290618896
+    ],
+    "latency_ms_from_client_per_run": [
+        28.507,
+        28.467,
+        28.469,
+        28.537,
+        28.494
+    ],
+    "energy_mWh_per_run": [
+        32.0,
+        31.0,
+        33.0,
+        31.0,
+        32.0
+    ]
 }

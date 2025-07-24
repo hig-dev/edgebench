@@ -33,7 +33,8 @@ class HailoInterpreter(BaseInterpreter):
         return (1, *shape)
     
     def get_input_dtype(self) -> DTypeLike:
-        return self.input_vstream_info.dtype
+        # TODO: Replace with actual input dtype retrieval logic
+        return np.float32
 
     def set_input(self, input_data: np.ndarray):
         self.input = input_data.copy()
