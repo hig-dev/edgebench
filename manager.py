@@ -210,6 +210,7 @@ class EdgeBenchManager:
     def run_latency(
         self,
         iterations: int,
+        runs: int,
         with_energy_measurement: bool = False,
         already_connected: bool = False,
         disconnect_after: bool = True,
@@ -244,55 +245,74 @@ class EdgeBenchManager:
             self.wait_for_status(ClientStatus.READY_FOR_INPUT)
             self.send_input(model_path, self.latency_input, t.INPUT_LATENCY())
             self.wait_for_status(ClientStatus.READY_FOR_TASK)
+            run_latencies = []
+            run_latencies_from_client = []
+            run_energies = []
+            while len(run_latencies) < runs:
+                l.log(
+                    f"Run {len(run_latencies) + 1}/{runs} for model {model_path} on device {device_id}"
+                )
+                if with_energy_measurement:
+                    l.log("Ready for energy measurement?")
+                    input("Press Enter to continue...")
+                self.send_command(Command.START_LATENCY_TEST)
+                l.log("Waiting for clients to finish...")
 
-            if with_energy_measurement:
-                l.log("Ready for energy measurement?")
-                input("Press Enter to continue...")
+                start_time = time.time()
+                end_time = None
+                done = False
+                elapsed_ms_from_client = None
+                while not done or elapsed_ms_from_client is None:
+                    message = self.wait_for_message()
+                    if message:
+                        if (
+                            message.topic == t.STATUS()
+                            and ClientStatus.from_bytes(
+                                message.payload, byteorder=BYTE_ORDER
+                            )
+                            == ClientStatus.DONE
+                        ):
+                            done = True
+                            end_time = time.time()
+                            l.log(f"{device_id} is done. Timing stopped.")
+                        elif message.topic == t.RESULT_LATENCY():
+                            elapsed_ms_from_client = int.from_bytes(
+                                message.payload, byteorder=BYTE_ORDER
+                            )
 
-            self.send_command(Command.START_LATENCY_TEST)
-            l.log("Waiting for clients to finish...")
-
-            start_time = time.time()
-            end_time = None
-            done = False
-            elapsed_ms_from_client = None
-            while not done or elapsed_ms_from_client is None:
-                message = self.wait_for_message()
-                if message:
-                    if (
-                        message.topic == t.STATUS()
-                        and ClientStatus.from_bytes(
-                            message.payload, byteorder=BYTE_ORDER
-                        )
-                        == ClientStatus.DONE
-                    ):
-                        done = True
-                        end_time = time.time()
-                        l.log(f"{device_id} is done. Timing stopped.")
-                    elif message.topic == t.RESULT_LATENCY():
-                        elapsed_ms_from_client = int.from_bytes(
-                            message.payload, byteorder=BYTE_ORDER
-                        )
-
-            elapsed_ms = (end_time - start_time) * 1000
-            avg_latency_ms = elapsed_ms / iterations
-            avg_latency_ms_from_client = float(elapsed_ms_from_client) / iterations
-            measured_energy_input_mWh = 0.0
-            if with_energy_measurement:
-                l.log("Please enter measured energy in mWh:")
-                while measured_energy_input_mWh <= 0:
-                    try:
-                        measured_energy_input_mWh = float(input())
-                    except ValueError:
-                        l.log("Invalid input. Please enter a positive number.")
-
+                elapsed_ms = (end_time - start_time) * 1000
+                latency_ms = elapsed_ms / iterations
+                latency_ms_from_client = float(elapsed_ms_from_client) / iterations
+                measured_energy_input_mWh = 0.0
+                if with_energy_measurement:
+                    l.log("Please enter measured energy in mWh:")
+                    print('\a') # Beep to alert user
+                    while measured_energy_input_mWh <= 0:
+                        try:
+                            measured_energy_input_mWh = float(input())
+                        except ValueError:
+                            l.log("Invalid input. Please enter a positive number.")
+                run_latencies.append(latency_ms)
+                run_latencies_from_client.append(latency_ms_from_client)
+                run_energies.append(measured_energy_input_mWh)
+            assert len(run_latencies) == runs and len(run_energies) == runs and len(run_latencies_from_client) == runs, (
+                f"Expected {runs} runs, but got {len(run_latencies)} latencies, "
+                f"{len(run_energies)} energies, and {len(run_latencies_from_client)} latencies from client."
+            )
+            avg_latency_ms = np.mean(run_latencies)
+            avg_latency_ms_from_client = np.mean(run_latencies_from_client)
+            avg_energy_mWh = np.mean(run_energies)
             latency_test_report = {
                 "device_id": device_id,
                 "model_name": os.path.basename(model_path),
                 "iterations": iterations,
+                "runs": runs,
                 "avg_latency_ms": avg_latency_ms,
                 "avg_latency_ms_from_client": avg_latency_ms_from_client,
-                "energy_mWh": measured_energy_input_mWh,
+                "avg_energy_mWh": avg_energy_mWh,
+                "latency_ms_per_run": run_latencies,
+                "latency_ms_from_client_per_run": run_latencies_from_client,
+                "energy_mWh_per_run": run_energies,
             }
 
             os.makedirs(os.path.dirname(latency_test_report_path), exist_ok=True)
@@ -301,9 +321,6 @@ class EdgeBenchManager:
             l.log(f"Latency test report saved to {latency_test_report_path}")
             l.log(
                 f"Average latency: {avg_latency_ms:.2f} ms (from client: {avg_latency_ms_from_client:.2f} ms)"
-            )
-            l.log(
-                f"Elapsed time: {elapsed_ms:.2f} ms (from client: {elapsed_ms_from_client:.2f} ms)"
             )
 
             is_last_model = model_index >= len(self.model_paths) - 1
@@ -474,6 +491,13 @@ def main():
         help="Number of iterations for latency test",
     )
     parser.add_argument(
+        "-r",
+        "--runs",
+        type=int,
+        default=5,
+        help="Number of runs for latency test",
+    )
+    parser.add_argument(
         "-l",
         "--limit",
         type=int,
@@ -538,6 +562,7 @@ def main():
     if args.latency:
         manager.run_latency(
             iterations=args.iterations,
+            runs=args.runs,
             disconnect_after=not args.accuracy,
             with_energy_measurement=args.energy,
         )

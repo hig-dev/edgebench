@@ -4,5 +4,5 @@
     "iterations": 100,
     "avg_latency_ms": 115.46408414840698,
     "avg_latency_ms_from_client": 115.44,
-    "energy_mWh": 22.0
+    "avg_energy_mWh": 22.0
 }

@@ -122,6 +122,7 @@ python manager.py --device [DEVICE_ID] [OPTIONS]
 
 **Test Configuration:**
 - `--iterations`, `-n`: Number of iterations for latency test (default: 100)
+- `--runs`, `-r`: Number of runs for latency test (default: 5)
 - `--limit`, `-l`: Limit for accuracy test samples (0 for no limit)
 - `--energy`: Enable energy measurement during testing
 

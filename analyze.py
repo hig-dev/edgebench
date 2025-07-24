@@ -21,14 +21,14 @@ models = [
 ]
 
 device_names = [
-    "rtx5090", # NVIDIA RTX 5090 as a high-end desktop GPU
+    "rtx5090",  # NVIDIA RTX 5090 as a high-end desktop GPU
     "esp32s3",
     "coralmicro",
     "grove_vision_ai_v2",
     "rp5",
-    #"rp5_ort",  # Raspberry Pi 5 with ONNX Runtime
-    #"rp5_executorch",  # Raspberry Pi 5 with Executorch
-    #"rp5_tvm",  # Raspberry Pi 5 with TVM
+    # "rp5_ort",  # Raspberry Pi 5 with ONNX Runtime
+    # "rp5_executorch",  # Raspberry Pi 5 with Executorch
+    # "rp5_tvm",  # Raspberry Pi 5 with TVM
     "beaglevahead",
     "beagleyai",
     "hailo",
@@ -75,20 +75,18 @@ with open(TORCH_MODEL_SUMMARY_JSON_FILE, "r") as f:
 with open(IDLE_ENERGY_JSON_FILE, "r") as f:
     idle_energy = json.load(f)
 
+
 def get_latency_report(device_name: str, model_name: str):
     device_reports_dir = osp.join(REPORTS_DIR, device_name)
     report_path = [
-        x
-        for x in os.listdir(device_reports_dir)
-        if model_name in x and "_latency" in x
+        x for x in os.listdir(device_reports_dir) if model_name in x and "_latency" in x
     ]
-    report_path = (
-        osp.join(device_reports_dir, report_path[0]) if report_path else None
-    )
+    report_path = osp.join(device_reports_dir, report_path[0]) if report_path else None
     if report_path and osp.exists(report_path):
         with open(report_path, "r") as f:
             return json.load(f)
     return None
+
 
 def get_accuracy_report(device_name: str, model_name: str):
     device_reports_dir = osp.join(REPORTS_DIR, device_name)
@@ -97,9 +95,7 @@ def get_accuracy_report(device_name: str, model_name: str):
         for x in os.listdir(device_reports_dir)
         if model_name in x and "_accuracy" in x
     ]
-    report_path = (
-        osp.join(device_reports_dir, report_path[0]) if report_path else None
-    )
+    report_path = osp.join(device_reports_dir, report_path[0]) if report_path else None
     if report_path and osp.exists(report_path):
         with open(report_path, "r") as f:
             return json.load(f)
@@ -414,7 +410,7 @@ for metric_key, metric_name in [
     ("avg_latency_ms_from_client", "Latency (ms)"),
     ("PCK", "PCK"),
     ("PCK-AUC", "PCK-AUC"),
-    ("energy_mWh", "Energy (mWh)"),
+    ("avg_energy_mWh", "Energy (mWh)"),
 ]:
     print(f"\n{metric_name} comparison across devices:")
     table = PrettyTable()
@@ -424,27 +420,28 @@ for metric_key, metric_name in [
     for device_name in device_names:
         row = [display_names.get(device_name, device_name)]
         for model_name in models:
-            if metric_key == "avg_latency_ms_from_client" or metric_key == "energy_mWh":
+            if (
+                metric_key == "avg_latency_ms_from_client"
+                or metric_key == "avg_energy_mWh"
+            ):
                 report = get_latency_report(device_name, model_name)
             else:
                 report = get_accuracy_report(device_name, model_name)
-            
+
             if report:
                 value = report.get(metric_key, -1)
             else:
                 value = -1
-            
+
             if metric_key == "avg_latency_ms_from_client":
                 row.append(format_latency(value))
-            elif metric_key == "energy_mWh":
+            elif metric_key == "avg_energy_mWh":
                 if value <= 0:
                     row.append("DNF")
                 else:
                     iterations = report.get("iterations", -1)
                     if iterations <= 0:
-                        raise ValueError(
-                            f"Invalid iterations count {iterations}"
-                        )
+                        raise ValueError(f"Invalid iterations count {iterations}")
                     row.append(f"{(value / iterations)*1000:.0f}")
             elif metric_key in ["PCK", "PCK-AUC"]:
                 # Find the torch model summary for the current model by model name
@@ -490,7 +487,7 @@ for model_name in models:
 
     iterations = report.get("iterations", 1)
     duration_ms = report.get("avg_latency_ms_from_client", -1) * iterations
-    energy_Wh = report.get("energy_mWh", -1) * 0.001
+    energy_Wh = report.get("avg_energy_mWh", -1) * 0.001
     if duration_ms <= 0 or energy_Wh <= 0:
         raise ValueError(
             f"Invalid duration {duration_ms} ms or energy {energy_Wh} mWh in report"
@@ -503,7 +500,6 @@ for model_name in models:
         f"{model_name}: {adjusted_energy_per_inference_microWh:.0f} μWh (+{((carrier_energy_Wh/iterations)*1e6):.2f})"
     )
 
-    
 
 print("\nPower comparison across devices:")
 table = PrettyTable()
@@ -514,23 +510,25 @@ table.field_names = [
     "Avg Inference Power (W)",
     "Variance",
     "Std",
-    "Coefficient of Variation"
+    "Coefficient of Variation",
 ] + models
 for device_name in device_names:
     idle_energy_value = idle_energy.get(device_name, -1)
     # Calculate avg inference power
-    total_energy_used_Wh_by_model = { m : 0 for m in models }
-    total_time_seconds_by_model = { m : 0 for m in models }
+    total_energy_used_Wh_by_model = {m: 0 for m in models}
+    total_time_seconds_by_model = {m: 0 for m in models}
     for model_name in models:
         report = get_latency_report(device_name, model_name)
         if report:
             avg_latency_ms = report.get("avg_latency_ms_from_client", -1)
             iterations = report.get("iterations", 1)
-            energy_mWh = report.get("energy_mWh", 0)
+            energy_mWh = report.get("avg_energy_mWh", 0)
             if avg_latency_ms > 0 and iterations > 0 and energy_mWh > 0:
                 avg_latency_seconds = avg_latency_ms / 1000
                 energy_Wh = energy_mWh / 1000
-                total_time_seconds_by_model[model_name] += avg_latency_seconds * iterations
+                total_time_seconds_by_model[model_name] += (
+                    avg_latency_seconds * iterations
+                )
                 total_energy_used_Wh_by_model[model_name] += energy_Wh
 
     def get_avg_inference_power(energy_used_Wh: float, time_seconds: float) -> float:
@@ -542,34 +540,44 @@ for device_name in device_names:
     avg_inference_power_by_model = {
         model_name: get_avg_inference_power(
             total_energy_used_Wh_by_model[model_name],
-            total_time_seconds_by_model[model_name]
+            total_time_seconds_by_model[model_name],
         )
         for model_name in models
     }
     total_energy_used_Wh = sum(total_energy_used_Wh_by_model.values())
     total_time_seconds = sum(total_time_seconds_by_model.values())
-    average_inference_power = get_avg_inference_power(total_energy_used_Wh, total_time_seconds)
+    average_inference_power = get_avg_inference_power(
+        total_energy_used_Wh, total_time_seconds
+    )
     # Calculate variance using only valid models (non-zero avg inference power)
-    valid_models = [model_name for model_name in models if avg_inference_power_by_model[model_name] > 0]
+    valid_models = [
+        model_name
+        for model_name in models
+        if avg_inference_power_by_model[model_name] > 0
+    ]
     if valid_models:
-        valid_avg = sum(avg_inference_power_by_model[m] for m in valid_models) / len(valid_models)
+        valid_avg = sum(avg_inference_power_by_model[m] for m in valid_models) / len(
+            valid_models
+        )
         variance = sum(
             (avg_inference_power_by_model[m] - valid_avg) ** 2 for m in valid_models
         ) / len(valid_models)
     else:
         variance = 0
-    std = variance ** 0.5
-    coefficient_of_variation = std / average_inference_power if average_inference_power > 0 else 0
+    std = variance**0.5
+    coefficient_of_variation = (
+        std / average_inference_power if average_inference_power > 0 else 0
+    )
     table.add_row(
         [
             display_names.get(device_name, device_name),
             f"{idle_energy_value:.2f} W",
-            f"{average_inference_power:.2f} W",
+            f"{average_inference_power:.4f} W",
             f"{variance:.4f} W^2",
-            f"{std:.2f} W",
+            f"{std:.4f} W",
             f"{coefficient_of_variation:.4f}",
-        ] +
-        [f"{avg_inference_power_by_model[model_name]:.2f} W" for model_name in models]
+        ]
+        + [f"{avg_inference_power_by_model[model_name]:.2f} W" for model_name in models]
     )
 
 print(table)
@@ -605,9 +613,9 @@ for device_name in device_names:
     best_pck_auc = 0
 
     if "rtx5090" in device_name:
-            best_pck = reference_pck
-            best_pck_auc = reference_pck_auc
-            best_model = "efficientvit_l2"
+        best_pck = reference_pck
+        best_pck_auc = reference_pck_auc
+        best_model = "efficientvit_l2"
     else:
         for model_name in models:
             latency_report = get_latency_report(device_name, model_name)
@@ -616,15 +624,18 @@ for device_name in device_names:
             if not latency_report or not accuracy_report:
                 failed_models += 1
                 continue
-            
-            
+
             pck = accuracy_report.get("PCK", 0)
             pck_auc = accuracy_report.get("PCK-AUC", 0)
 
-            reference_accuracy_same_model_report = get_accuracy_report(reference_device_name, model_name)
-            reference_pck_same_model = reference_accuracy_same_model_report.get("PCK", 0)
-            pck_drop =  (reference_pck_same_model - pck) / reference_pck_same_model
-                    
+            reference_accuracy_same_model_report = get_accuracy_report(
+                reference_device_name, model_name
+            )
+            reference_pck_same_model = reference_accuracy_same_model_report.get(
+                "PCK", 0
+            )
+            pck_drop = (reference_pck_same_model - pck) / reference_pck_same_model
+
             if pck_drop > 0.5:
                 failed_models += 1
                 continue
@@ -635,28 +646,44 @@ for device_name in device_names:
                 best_model = model_name
 
     if not best_model:
-        raise ValueError(
-            f"No valid model found for device {device_name} with reports"
-        )
-    
+        raise ValueError(f"No valid model found for device {device_name} with reports")
+
     reference_latency_report = get_latency_report(reference_device_name, best_model)
     device_latency_report = get_latency_report(device_name, best_model)
-    assert reference_latency_report, f"Reference latency report for {reference_device_name} not found"
+    assert (
+        reference_latency_report
+    ), f"Reference latency report for {reference_device_name} not found"
     assert device_latency_report, f"Device latency report for {device_name} not found"
 
     reference_latency = reference_latency_report.get("avg_latency_ms_from_client", 0)
     device_latency = device_latency_report.get("avg_latency_ms_from_client", 0)
-    assert reference_latency > 0, f"Reference latency for {reference_device_name} is not valid"
+    assert (
+        reference_latency > 0
+    ), f"Reference latency for {reference_device_name} is not valid"
     assert device_latency > 0, f"Device latency for {device_name} is not valid"
 
-    energy_reference_latency_report = get_latency_report(energy_reference_device_name, energy_reference_model_name)
-    energy_device_latency_report = get_latency_report(device_name, energy_reference_model_name)
-    assert energy_reference_latency_report, f"Energy reference latency report for {energy_reference_device_name} not found"
-    assert energy_device_latency_report, f"Energy device latency report for {device_name} not found"
+    energy_reference_latency_report = get_latency_report(
+        energy_reference_device_name, energy_reference_model_name
+    )
+    energy_device_latency_report = get_latency_report(
+        device_name, energy_reference_model_name
+    )
+    assert (
+        energy_reference_latency_report
+    ), f"Energy reference latency report for {energy_reference_device_name} not found"
+    assert (
+        energy_device_latency_report
+    ), f"Energy device latency report for {device_name} not found"
 
-    reference_energy = energy_reference_latency_report.get("energy_mWh", 0) / energy_reference_latency_report.get("iterations", 1)
-    device_energy = energy_device_latency_report.get("energy_mWh", 0) / energy_device_latency_report.get("iterations", 1)
-    assert reference_energy > 0, f"Reference energy for {energy_reference_device_name} is not valid"
+    reference_energy = energy_reference_latency_report.get(
+        "avg_energy_mWh", 0
+    ) / energy_reference_latency_report.get("iterations", 1)
+    device_energy = energy_device_latency_report.get(
+        "avg_energy_mWh", 0
+    ) / energy_device_latency_report.get("iterations", 1)
+    assert (
+        reference_energy > 0
+    ), f"Reference energy for {energy_reference_device_name} is not valid"
     assert device_energy > 0, f"Device energy for {device_name} is not valid"
 
     compatibility_score = (total_models - failed_models) / total_models * 100
@@ -666,29 +693,44 @@ for device_name in device_names:
     latency_score = (reference_latency / device_latency) * 100
     energy_score = (reference_energy / device_energy) * 100
     total_score = compatibility_score + accuracy_score + latency_score + energy_score
-    table.add_row([
-        display_names.get(device_name, device_name),
-        f"{compatibility_score:.0f}",
-        f"{pck_score:.2f}",
-        f"{pck_auc_score:.2f}",
-        f"{accuracy_score:.0f}",
-        f"{latency_score:.2f}",
-        f"{energy_score:.0f}",
-        f"{total_score:.0f}",
-        model_display_names.get(best_model, best_model)
-    ])
+    table.add_row(
+        [
+            display_names.get(device_name, device_name),
+            f"{compatibility_score:.0f}",
+            f"{pck_score:.2f}",
+            f"{pck_auc_score:.2f}",
+            f"{accuracy_score:.0f}",
+            f"{latency_score:.2f}",
+            f"{energy_score:.0f}",
+            f"{total_score:.0f}",
+            model_display_names.get(best_model, best_model),
+        ]
+    )
 
 print(table)
 print(table.get_latex_string())
-def create_plot(df: pd.DataFrame, file_path: str, metrics: list, x_label: str = "Device", y_label: str = "Score", stacked: bool = True):
-    plt.rcParams['axes.prop_cycle'] = cycler(color=['#FFC000', '#FF6600', '#FF0033', '#FF33CC'])
-    plt.rcParams['axes.axisbelow'] = True
-    plt.rcParams['grid.color'] = 'gray'
-    plt.rcParams['grid.linestyle'] = '--'
-    plt.rcParams['grid.linewidth'] = 0.5
-    plt.rcParams['grid.alpha'] = 0.7
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+
+def create_plot(
+    df: pd.DataFrame,
+    file_path: str,
+    metrics: list,
+    x_label: str = "Device",
+    y_label: str = "Score",
+    stacked: bool = True,
+):
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams["font.sans-serif"] = "Linux Libertine O"
+    plt.rcParams["axes.prop_cycle"] = cycler(
+        color=["#FFC000", "#FF6600", "#FF0033", "#FF33CC"]
+    )
+    plt.rcParams["axes.axisbelow"] = True
+    plt.rcParams["grid.color"] = "gray"
+    plt.rcParams["grid.linestyle"] = "--"
+    plt.rcParams["grid.linewidth"] = 0.5
+    plt.rcParams["grid.alpha"] = 0.7
+    scaling_factor = 0.6
+    fig, ax = plt.subplots(figsize=(10 * scaling_factor, 6.5 * scaling_factor), dpi=300)
     x = np.arange(len(df))
     bottom = np.zeros(len(df))
     width = 0.25
@@ -699,9 +741,9 @@ def create_plot(df: pd.DataFrame, file_path: str, metrics: list, x_label: str = 
             bottom += df[metric]
     else:
         for i, metric in enumerate(metrics):
-            ax.bar(x + i*width, df[metric], width, label=metric)
+            ax.bar(x + i * width, df[metric], width, label=metric)
 
-    ax.grid(axis='y')
+    ax.grid(axis="y")
     ax.set_xticks(x) if stacked else ax.set_xticks(x + width)
     ax.set_xticklabels(df[x_label], rotation=45, ha="right")
     ax.set_ylabel(y_label)
@@ -709,11 +751,12 @@ def create_plot(df: pd.DataFrame, file_path: str, metrics: list, x_label: str = 
     plt.tight_layout()
     plt.savefig(file_path)
 
+
 df = pd.read_csv(StringIO(table.get_csv_string()))
 metrics = ["Compatibility", "Accuracy", "Inference Latency", "Energy Efficiency"]
-df['Total Score'] = df[metrics].sum(axis=1)
+df["Total Score"] = df[metrics].sum(axis=1)
 df_sorted = df.sort_values("Total Score", ascending=False).reset_index(drop=True)
-create_plot(df_sorted, "plots/scores-bar-chart.png", metrics)
+create_plot(df_sorted, "plots/scores-bar-chart.pdf", metrics)
 
 print("\nNeural architecture comparison:")
 cnn_repr_model = "mobileone_s1"
@@ -748,63 +791,97 @@ for device_name in device_names:
     hybrid_report = get_latency_report(device_name, hybrid_repr_model)
 
     if not cnn_report:
-        cnn_report = {"avg_latency_ms_from_client": -1, "energy_mWh": -1, "iterations": 1}
+        cnn_report = {
+            "avg_latency_ms_from_client": -1,
+            "avg_energy_mWh": -1,
+            "iterations": 1,
+        }
     if not transformer_report:
-        transformer_report = {"avg_latency_ms_from_client": -1, "energy_mWh": -1, "iterations": 1}
+        transformer_report = {
+            "avg_latency_ms_from_client": -1,
+            "avg_energy_mWh": -1,
+            "iterations": 1,
+        }
     if not hybrid_report:
-        hybrid_report = {"avg_latency_ms_from_client": -1, "energy_mWh": -1, "iterations": 1}
+        hybrid_report = {
+            "avg_latency_ms_from_client": -1,
+            "avg_energy_mWh": -1,
+            "iterations": 1,
+        }
 
     cnn_latency = cnn_report.get("avg_latency_ms_from_client", -1)
     transformer_latency = transformer_report.get("avg_latency_ms_from_client", -1)
     hybrid_latency = hybrid_report.get("avg_latency_ms_from_client", -1)
 
-    cnn_energy = cnn_report.get("energy_mWh", -1) / cnn_report.get("iterations", 1)
-    transformer_energy = transformer_report.get("energy_mWh", -1) / transformer_report.get("iterations", 1)
-    hybrid_energy = hybrid_report.get("energy_mWh", -1) / hybrid_report.get("iterations", 1)
+    cnn_energy = cnn_report.get("avg_energy_mWh", -1) / cnn_report.get("iterations", 1)
+    transformer_energy = transformer_report.get(
+        "avg_energy_mWh", -1
+    ) / transformer_report.get("iterations", 1)
+    hybrid_energy = hybrid_report.get("avg_energy_mWh", -1) / hybrid_report.get(
+        "iterations", 1
+    )
 
     if transformer_latency < 0 and hybrid_latency < 0:
         continue
 
     increased_latency_hybrid = (
-        hybrid_latency / cnn_latency * 100
-        if cnn_latency > 0 else -1
+        hybrid_latency / cnn_latency * 100 if cnn_latency > 0 else -1
     )
     increased_latency_transformer = (
-        transformer_latency / cnn_latency * 100
-        if cnn_latency > 0 else -1
+        transformer_latency / cnn_latency * 100 if cnn_latency > 0 else -1
     )
-    increased_energy_hybrid = (
-        hybrid_energy / cnn_energy * 100
-        if cnn_energy > 0 else -1
-    )
+    increased_energy_hybrid = hybrid_energy / cnn_energy * 100 if cnn_energy > 0 else -1
     increased_energy_transformer = (
-        transformer_energy / cnn_energy * 100
-        if cnn_energy > 0 else -1
+        transformer_energy / cnn_energy * 100 if cnn_energy > 0 else -1
     )
 
-    table_latency.add_row([
-        display_names.get(device_name, device_name),
-        cnn_latency if cnn_latency >= 0 else "0",
-        hybrid_latency if hybrid_latency >= 0 else "0",
-        transformer_latency if transformer_latency >= 0 else "0",
-        f"{increased_latency_hybrid:.2f}%" if hybrid_latency >= 0 else "DNF",
-        f"{increased_latency_transformer:.2f}%" if transformer_latency >= 0 else "DNF",
-    ])
-    table_energy.add_row([
-        display_names.get(device_name, device_name),
-        f"{(cnn_energy * 1000):.0f}" if cnn_energy > 0 else "0",
-        f"{(hybrid_energy * 1000):.0f}" if hybrid_energy > 0 else "0",
-        f"{(transformer_energy * 1000):.0f}" if transformer_energy > 0 else "0",
-        f"{increased_energy_hybrid:.2f}%" if hybrid_energy >= 0 else "DNF",
-        f"{increased_energy_transformer:.2f}%" if transformer_energy >= 0 else "DNF",
-    ])
+    table_latency.add_row(
+        [
+            display_names.get(device_name, device_name),
+            cnn_latency if cnn_latency >= 0 else "0",
+            hybrid_latency if hybrid_latency >= 0 else "0",
+            transformer_latency if transformer_latency >= 0 else "0",
+            f"{increased_latency_hybrid:.2f}%" if hybrid_latency >= 0 else "DNF",
+            (
+                f"{increased_latency_transformer:.2f}%"
+                if transformer_latency >= 0
+                else "DNF"
+            ),
+        ]
+    )
+    table_energy.add_row(
+        [
+            display_names.get(device_name, device_name),
+            f"{(cnn_energy * 1000):.0f}" if cnn_energy > 0 else "0",
+            f"{(hybrid_energy * 1000):.0f}" if hybrid_energy > 0 else "0",
+            f"{(transformer_energy * 1000):.0f}" if transformer_energy > 0 else "0",
+            f"{increased_energy_hybrid:.2f}%" if hybrid_energy >= 0 else "DNF",
+            (
+                f"{increased_energy_transformer:.2f}%"
+                if transformer_energy >= 0
+                else "DNF"
+            ),
+        ]
+    )
 
 print(table_latency)
 df = pd.read_csv(StringIO(table_latency.get_csv_string()))
 metrics = ["CNN-based model", "Hybrid model", "Transformer-based model"]
-create_plot(df, "plots/latency-bar-chart.png", metrics, y_label="Inference Latency (ms)", stacked=False)
+create_plot(
+    df,
+    "plots/latency-bar-chart.pdf",
+    metrics,
+    y_label="Inference Latency (ms)",
+    stacked=False,
+)
 
 print(table_energy)
 df = pd.read_csv(StringIO(table_energy.get_csv_string()))
 metrics = ["CNN-based model", "Hybrid model", "Transformer-based model"]
-create_plot(df, "plots/energy-bar-chart.png", metrics, y_label="Energy Efficiency (μWh)", stacked=False)
+create_plot(
+    df,
+    "plots/energy-bar-chart.pdf",
+    metrics,
+    y_label="Energy Efficiency (μWh)",
+    stacked=False,
+)
