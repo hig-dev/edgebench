@@ -1,8 +1,0 @@
-{
-    "device_id": "beaglevahead",
-    "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_v17_int16_sym_hbb.zip",
-    "iterations": 1000,
-    "avg_latency_ms": 31.678549766540527,
-    "avg_latency_ms_from_client": 31.668,
-    "avg_energy_mWh": 39.0
-}
