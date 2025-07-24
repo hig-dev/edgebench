@@ -171,6 +171,7 @@ esp_err_t I2CComm::write_(uint8_t feature, uint8_t cmd, uint16_t data_len, uint8
 
 esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *data)
 {
+    vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS);
     if (data_len <= MAX_PL_LEN)
     {
         return write_(feature, cmd, data_len, data);
@@ -219,6 +220,7 @@ esp_err_t I2CComm::write(uint8_t feature, uint8_t cmd, int data_len, uint8_t *da
 
 int I2CComm::read_latency_result_ms()
 {
+    vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS);
     if (!initialized_)
     {
         ESP_LOGE(TAG, "I2C not initialized");
@@ -268,6 +270,7 @@ int I2CComm::read_latency_result_ms()
 
 std::vector<uint8_t> I2CComm::read_accuracy_result(int model_output_size)
 {
+    vTaskDelay(I2C_DELAY / portTICK_PERIOD_MS);
     if (!initialized_)
     {
         ESP_LOGE(TAG, "I2C not initialized");

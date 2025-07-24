@@ -6,6 +6,14 @@
 
 static const char *TAG = "EdgeBenchClient";
 
+void wait_for_i2c_result_ready()
+{
+    while (!gpio_get_level(GPIO_NUM_1))
+    {
+        vTaskDelay(1 / portTICK_PERIOD_MS);
+    }
+}
+
 EdgeBenchClient::EdgeBenchClient(const std::string &device_id,
                                  const std::string &broker_host,
                                  int broker_port)
@@ -75,53 +83,16 @@ void EdgeBenchClient::startLatencyTest()
 {
     ESP_LOGI(TAG, "Running %d iterations...", iterations_);
 #if I2C_MASTER
-    // Send mode as latency test
-    uint8_t mode = static_cast<uint8_t>(TestMode::LATENCY);
-    auto ret = i2c_comm_.write(I2CCOMM_FEATURE_MODE, 0, sizeof(mode), &mode);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to set mode: %s", esp_err_to_name(ret));
-        quit_ = true;
-        return;
-    }
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    // Send iterations count
-    uint8_t iterations_buffer[4] = {
-        uint8_t(iterations_ >> 24),
-        uint8_t(iterations_ >> 16),
-        uint8_t(iterations_ >> 8),
-        uint8_t(iterations_)};
-    ret = i2c_comm_.write(I2CCOMM_FEATURE_ITERATIONS, 0, 4, iterations_buffer);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to set iterations: %s", esp_err_to_name(ret));
-        quit_ = true;
-        return;
-    }
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    // Send input tensor
-    ESP_LOGI(TAG, "Send input tensor: %zu bytes", model_input_size_);
-    ret = i2c_comm_.write(I2CCOMM_FEATURE_INPUT, 0, model_input_size_, reinterpret_cast<uint8_t *>(input_tensor_));
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to send input tensor: %s", esp_err_to_name(ret));
-        quit_ = true;
-        return;
-    }
-    // Wait for the device to be ready
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
     // Send start command
     uint8_t cmd = static_cast<uint8_t>(Command::START_LATENCY_TEST);
-    ret = i2c_comm_.write(I2CCOMM_FEATURE_CMD, 0, sizeof(cmd), &cmd);
+    auto ret = i2c_comm_.write(I2CCOMM_FEATURE_CMD, 0, sizeof(cmd), &cmd);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to send start command: %s", esp_err_to_name(ret));
         quit_ = true;
         return;
     }
-    const int estimated_latency_ms = 750;
-    int estimated_time_ms = iterations_ * estimated_latency_ms;
-    vTaskDelay(estimated_time_ms / portTICK_PERIOD_MS);
+    wait_for_i2c_result_ready();
     // Receive result from I2C device (ms)
     int ms = i2c_comm_.read_latency_result_ms();
     sendStatus(ClientStatus::DONE);
@@ -149,37 +120,16 @@ void EdgeBenchClient::startLatencyTest()
 void EdgeBenchClient::startAccuracyTest()
 {
 #if I2C_MASTER
-    // Send mode as latency test
-    uint8_t mode = static_cast<uint8_t>(TestMode::ACCURACY);
-    auto ret = i2c_comm_.write(I2CCOMM_FEATURE_MODE, 0, sizeof(mode), &mode);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to set mode: %s", esp_err_to_name(ret));
-        quit_ = true;
-        return;
-    }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    // Send input tensor
-    ESP_LOGI(TAG, "Send input tensor: %zu bytes", model_input_size_);
-    ret = i2c_comm_.write(I2CCOMM_FEATURE_INPUT, 0, model_input_size_, reinterpret_cast<uint8_t *>(input_tensor_));
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to send input tensor: %s", esp_err_to_name(ret));
-        quit_ = true;
-        return;
-    }
-    // Wait for the device to be ready
-    vTaskDelay(10 / portTICK_PERIOD_MS);
     // Send start command
     uint8_t cmd = static_cast<uint8_t>(Command::START_LATENCY_TEST);
-    ret = i2c_comm_.write(I2CCOMM_FEATURE_CMD, 0, sizeof(cmd), &cmd);
+    auto ret = i2c_comm_.write(I2CCOMM_FEATURE_CMD, 0, sizeof(cmd), &cmd);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to send start command: %s", esp_err_to_name(ret));
         quit_ = true;
         return;
     }
-    vTaskDelay(270 / portTICK_PERIOD_MS);
+    wait_for_i2c_result_ready();
     // Receive result from I2C device (ms)
     model_output_size_ = DEFAULT_OUTPUT_SIZE;
     auto output_tensor = i2c_comm_.read_accuracy_result(model_output_size_);
@@ -340,6 +290,17 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
         }
         mode_ = static_cast<TestMode>(payload[0]);
         ESP_LOGI(TAG, "Mode set: %d", int(mode_));
+#if I2C_MASTER
+        uint8_t mode = static_cast<uint8_t>(mode_);
+        auto ret = i2c_comm_.write(I2CCOMM_FEATURE_MODE, 0, sizeof(mode), &mode);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to set mode: %s", esp_err_to_name(ret));
+            quit_ = true;
+            return;
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+#endif
     }
     else if (topic == topic_.CONFIG_ITERATIONS())
     {
@@ -356,6 +317,22 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
             (static_cast<int>(payload[2]) << 8) |
             static_cast<int>(payload[3]);
         ESP_LOGI(TAG, "Iterations set: %d", iterations_);
+#if I2C_MASTER
+        // Send iterations count
+        uint8_t iterations_buffer[4] = {
+            uint8_t(iterations_ >> 24),
+            uint8_t(iterations_ >> 16),
+            uint8_t(iterations_ >> 8),
+            uint8_t(iterations_)};
+        auto ret = i2c_comm_.write(I2CCOMM_FEATURE_ITERATIONS, 0, 4, iterations_buffer);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to set iterations: %s", esp_err_to_name(ret));
+            quit_ = true;
+            return;
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+#endif
     }
     else if (topic == topic_.MODEL())
     {
@@ -414,9 +391,37 @@ void EdgeBenchClient::handleMessage(const std::string &topic, const std::vector<
     {
         ESP_LOGI(TAG, "Input latency data loaded");
         latency_input_ready_ = true;
+#if I2C_MASTER
+        // Send input tensor
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        ESP_LOGI(TAG, "Send input tensor: %zu bytes", model_input_size_);
+        auto ret = i2c_comm_.write(I2CCOMM_FEATURE_INPUT, 0, model_input_size_, reinterpret_cast<uint8_t *>(input_tensor_));
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to send input tensor: %s", esp_err_to_name(ret));
+            quit_ = true;
+            return;
+        }
+        // Wait for the device to be ready
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+#endif
     }
     else if (topic == topic_.INPUT_ACCURACY())
     {
+#if I2C_MASTER
+        // Send input tensor
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        ESP_LOGI(TAG, "Send input tensor: %zu bytes", model_input_size_);
+        auto ret = i2c_comm_.write(I2CCOMM_FEATURE_INPUT, 0, model_input_size_, reinterpret_cast<uint8_t *>(input_tensor_));
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to send input tensor: %s", esp_err_to_name(ret));
+            quit_ = true;
+            return;
+        }
+        // Wait for the device to be ready
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+#endif
         xTaskCreatePinnedToCore(
             [](void *arg)
             {

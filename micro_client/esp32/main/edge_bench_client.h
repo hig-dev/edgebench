@@ -5,6 +5,7 @@
 #include <vector>
 #include "mqtt_topic.h"
 #include "mqtt_client.h"
+#include "driver/gpio.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #if I2C_MASTER
 #include "i2c_comm.h"

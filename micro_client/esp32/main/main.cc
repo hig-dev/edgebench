@@ -22,6 +22,7 @@
 #include "sdkconfig.h"
 #include "edge_bench_client.h"
 #include "tensorflow_config.h"
+#include "driver/gpio.h"
 
 #define ESP_MAXIMUM_RETRY  10
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
@@ -133,6 +134,15 @@ void wifi_init_sta(void)
 
 extern "C" void app_main(void* param)
 {
+    // Configure GPIO1 as input
+    gpio_config_t io_conf = {};
+    io_conf.intr_type    = GPIO_INTR_DISABLE;      // no interrupts
+    io_conf.mode         = GPIO_MODE_INPUT;        // input mode
+    io_conf.pin_bit_mask = 1ULL << GPIO_NUM_1;     // select GPIO1
+    io_conf.pull_up_en   = GPIO_PULLUP_ENABLE;     // enable pull‑up
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;  // disable pull‑down
+    gpio_config(&io_conf);
+
     // Initialize Tensor Arena before everything else
     TensorflowConfigResult tcr = initialize_tensorflow_config();
     if (tcr != TensorflowConfigResult::SUCCESS)
