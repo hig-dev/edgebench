@@ -1,8 +1,31 @@
 {
     "device_id": "grove_vision_ai_v2",
     "model_name": "0-ViTPose-efficientvit_b1-mpii-256x256-light_onnx2tf_int8_vela.tflite",
-    "iterations": 100,
-    "avg_latency_ms": 811.8776965141296,
-    "avg_latency_ms_from_client": 643.78,
-    "avg_energy_mWh": 2.57
+    "iterations": 500,
+    "runs": 5,
+    "avg_latency_ms": 643.9367411613464,
+    "avg_latency_ms_from_client": 643.8096,
+    "avg_energy_mWh": 12.0,
+    "avg_power_W_manual": 0.140,
+    "latency_ms_per_run": [
+        643.9238433837891,
+        644.050320148468,
+        643.8794088363647,
+        643.9336538314819,
+        643.8964796066284
+    ],
+    "latency_ms_from_client_per_run": [
+        643.808,
+        643.822,
+        643.8,
+        643.812,
+        643.806
+    ],
+    "energy_mWh_per_run": [
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0
+    ]
 }
