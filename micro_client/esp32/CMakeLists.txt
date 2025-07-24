@@ -16,4 +16,11 @@ add_compile_definitions(
   DEIT=0
 )
 
+# NOTES on EfficientViT:
+# EfficientViT models with ESP-NN optimizations fail at runtime:
+# tflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*) at /home/hig/src/edgebench/micro_client/esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc:291 (discriminator 1)
+# Disable ESP-NN optimizations for EfficientViT
+# Comment out the line: target_compile_options(${COMPONENT_LIB} PRIVATE -DESP_NN)
+# in ./managed_components/espressif__esp-tflite-micro/CMakeLists.txt
+
 project(edgebench)
