@@ -2,7 +2,45 @@
     "device_id": "rtx5090",
     "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light.onnx",
     "iterations": 1000,
-    "avg_latency_ms": 4.270702600479126,
-    "avg_latency_ms_from_client": 4.269,
-    "avg_energy_mWh": 168.3883333333333
+    "runs": 5,
+    "avg_latency_ms": 4.9759969234466555,
+    "avg_latency_ms_from_client": 4.973999999999999,
+    "avg_energy_mWh": 239.85733333333332,
+    "latency_ms_per_run": [
+        5.111715316772461,
+        4.732300281524658,
+        5.166699171066284,
+        4.580713510513306,
+        5.288556337356567
+    ],
+    "latency_ms_from_client_per_run": [
+        5.11,
+        4.73,
+        5.165,
+        4.579,
+        5.286
+    ],
+    "energy_mWh_per_run": [
+        244.55499999999998,
+        245.93666666666664,
+        212.77666666666664,
+        250.08166666666665,
+        245.93666666666664
+    ],
+    "avg_cpu_power_W": 68.2,
+    "avg_gpu_power_W": 105.4,
+    "cpu_power_W_per_run": [
+        69.0,
+        69.0,
+        62.0,
+        72.0,
+        69.0
+    ],
+    "gpu_power_W_per_run": [
+        108.0,
+        109.0,
+        92.0,
+        109.0,
+        109.0
+    ]
 }

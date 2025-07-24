@@ -212,6 +212,7 @@ class EdgeBenchManager:
         iterations: int,
         runs: int,
         with_energy_measurement: bool = False,
+        with_power_measurement: bool = False,
         already_connected: bool = False,
         disconnect_after: bool = True,
     ):
@@ -248,11 +249,13 @@ class EdgeBenchManager:
             run_latencies = []
             run_latencies_from_client = []
             run_energies = []
+            run_cpu_powers = []
+            run_gpu_powers = []
             while len(run_latencies) < runs:
                 l.log(
                     f"Run {len(run_latencies) + 1}/{runs} for model {model_path} on device {device_id}"
                 )
-                if with_energy_measurement:
+                if with_energy_measurement or with_power_measurement:
                     l.log("Ready for energy measurement?")
                     input("Press Enter to continue...")
                 self.send_command(Command.START_LATENCY_TEST)
@@ -283,8 +286,28 @@ class EdgeBenchManager:
                 elapsed_ms = (end_time - start_time) * 1000
                 latency_ms = elapsed_ms / iterations
                 latency_ms_from_client = float(elapsed_ms_from_client) / iterations
+                measured_cpu_power_W = 0.0
+                measured_gpu_power_W = 0.0
                 measured_energy_input_mWh = 0.0
-                if with_energy_measurement:
+                if with_power_measurement:
+                    l.log("Please enter measured CPU power in W:")
+                    print('\a')
+                    while measured_cpu_power_W <= 0:
+                        try:
+                            measured_cpu_power_W = float(input())
+                        except ValueError:
+                            l.log("Invalid input. Please enter a positive number.")
+                    l.log("Please enter measured GPU power in W:")
+                    while measured_gpu_power_W <= 0:
+                        try:
+                            measured_gpu_power_W = float(input())
+                        except ValueError:
+                            l.log("Invalid input. Please enter a positive number.")
+                    elapsed_h = elapsed_ms_from_client / 3_600_000.0
+                    measured_energy_input_mWh = (measured_cpu_power_W + measured_gpu_power_W) * elapsed_h * 1000.0
+                run_cpu_powers.append(measured_cpu_power_W)
+                run_gpu_powers.append(measured_gpu_power_W)
+                if with_energy_measurement and not with_power_measurement:
                     l.log("Please enter measured energy in mWh:")
                     print('\a') # Beep to alert user
                     while measured_energy_input_mWh <= 0:
@@ -302,6 +325,8 @@ class EdgeBenchManager:
             avg_latency_ms = np.mean(run_latencies)
             avg_latency_ms_from_client = np.mean(run_latencies_from_client)
             avg_energy_mWh = np.mean(run_energies)
+            avg_cpu_power_W = np.mean(run_cpu_powers)
+            avg_gpu_power_W = np.mean(run_gpu_powers)
             latency_test_report = {
                 "device_id": device_id,
                 "model_name": os.path.basename(model_path),
@@ -314,6 +339,12 @@ class EdgeBenchManager:
                 "latency_ms_from_client_per_run": run_latencies_from_client,
                 "energy_mWh_per_run": run_energies,
             }
+
+            if with_power_measurement:
+                latency_test_report["avg_cpu_power_W"] = avg_cpu_power_W
+                latency_test_report["avg_gpu_power_W"] = avg_gpu_power_W
+                latency_test_report["cpu_power_W_per_run"] = run_cpu_powers
+                latency_test_report["gpu_power_W_per_run"] = run_gpu_powers
 
             os.makedirs(os.path.dirname(latency_test_report_path), exist_ok=True)
             with open(latency_test_report_path, "w") as f:
@@ -458,6 +489,7 @@ def main():
         "--chunked", action="store_true", help="Transfer model in chunks"
     )
     parser.add_argument("--energy", action="store_true", help="With energy measurement")
+    parser.add_argument("--power", action="store_true", help="With power measurement")
     parser.add_argument(
         "--models-dir",
         default=os.path.join(os.path.dirname(__file__), "models"),
@@ -565,6 +597,7 @@ def main():
             runs=args.runs,
             disconnect_after=not args.accuracy,
             with_energy_measurement=args.energy,
+            with_power_measurement=args.power,
         )
 
     if args.accuracy:

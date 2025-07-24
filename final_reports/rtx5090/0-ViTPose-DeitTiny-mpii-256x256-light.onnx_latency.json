@@ -2,7 +2,45 @@
     "device_id": "rtx5090",
     "model_name": "0-ViTPose-DeitTiny-mpii-256x256-light.onnx",
     "iterations": 1000,
-    "avg_latency_ms": 4.829244375228882,
-    "avg_latency_ms_from_client": 4.827,
-    "avg_energy_mWh": 197.10250000000002
+    "runs": 5,
+    "avg_latency_ms": 5.8397712230682375,
+    "avg_latency_ms_from_client": 5.8376,
+    "avg_energy_mWh": 289.60982222222225,
+    "latency_ms_per_run": [
+        6.028599739074707,
+        5.025331735610962,
+        6.558218479156494,
+        5.58025598526001,
+        6.006450176239014
+    ],
+    "latency_ms_from_client_per_run": [
+        6.027,
+        5.023,
+        6.556,
+        5.578,
+        6.004
+    ],
+    "energy_mWh_per_run": [
+        291.88,
+        291.88,
+        288.6368888888889,
+        291.88,
+        283.7722222222222
+    ],
+    "avg_cpu_power_W": 70.8,
+    "avg_gpu_power_W": 107.8,
+    "cpu_power_W_per_run": [
+        70.0,
+        72.0,
+        72.0,
+        71.0,
+        69.0
+    ],
+    "gpu_power_W_per_run": [
+        110.0,
+        108.0,
+        106.0,
+        109.0,
+        106.0
+    ]
 }
