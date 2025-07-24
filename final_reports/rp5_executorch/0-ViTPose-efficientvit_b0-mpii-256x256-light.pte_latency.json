@@ -2,7 +2,29 @@
     "device_id": "rp5_executorch",
     "model_name": "0-ViTPose-efficientvit_b0-mpii-256x256-light.pte",
     "iterations": 100,
-    "avg_latency_ms": 65.68204402923584,
-    "avg_latency_ms_from_client": 65.66,
-    "avg_energy_mWh": 12.0
+    "runs": 5,
+    "avg_latency_ms": 63.94804096221924,
+    "avg_latency_ms_from_client": 63.926,
+    "avg_energy_mWh": 9.4,
+    "latency_ms_per_run": [
+        63.70165824890137,
+        63.96435737609863,
+        64.27622556686401,
+        64.21431541442871,
+        63.58364820480347
+    ],
+    "latency_ms_from_client_per_run": [
+        63.68,
+        63.94,
+        64.26,
+        64.19,
+        63.56
+    ],
+    "energy_mWh_per_run": [
+        10.0,
+        9.0,
+        9.0,
+        10.0,
+        9.0
+    ]
 }

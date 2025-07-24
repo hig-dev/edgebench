@@ -2,7 +2,29 @@
     "device_id": "rp5",
     "model_name": "0-ViTPose-DeitSmall-mpii-256x256-light_onnx2tf.tflite",
     "iterations": 100,
-    "avg_latency_ms": 197.28668451309204,
-    "avg_latency_ms_from_client": 196.61,
-    "avg_energy_mWh": 41.0
+    "runs": 5,
+    "avg_latency_ms": 195.66823959350586,
+    "avg_latency_ms_from_client": 195.642,
+    "avg_energy_mWh": 41.8,
+    "latency_ms_per_run": [
+        194.05709743499756,
+        196.78545713424683,
+        196.22365951538086,
+        196.12634897232056,
+        195.1486349105835
+    ],
+    "latency_ms_from_client_per_run": [
+        194.03,
+        196.76,
+        196.2,
+        196.1,
+        195.12
+    ],
+    "energy_mWh_per_run": [
+        45.0,
+        43.0,
+        40.0,
+        40.0,
+        41.0
+    ]
 }

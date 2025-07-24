@@ -2,7 +2,29 @@
     "device_id": "rp5_tvm",
     "model_name": "0-ViTPose-DeitTiny-mpii-256x256-light_v17.onnx",
     "iterations": 100,
-    "avg_latency_ms": 250.74120044708252,
-    "avg_latency_ms_from_client": 250.71,
-    "avg_energy_mWh": 50.0
+    "runs": 5,
+    "avg_latency_ms": 235.65588808059692,
+    "avg_latency_ms_from_client": 235.632,
+    "avg_energy_mWh": 44.4,
+    "latency_ms_per_run": [
+        233.3043336868286,
+        237.7083158493042,
+        235.2961301803589,
+        234.10340547561646,
+        237.86725521087646
+    ],
+    "latency_ms_from_client_per_run": [
+        233.28,
+        237.69,
+        235.27,
+        234.08,
+        237.84
+    ],
+    "energy_mWh_per_run": [
+        43.0,
+        43.0,
+        45.0,
+        46.0,
+        45.0
+    ]
 }

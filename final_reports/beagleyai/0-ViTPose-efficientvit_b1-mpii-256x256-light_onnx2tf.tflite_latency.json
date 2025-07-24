@@ -2,7 +2,29 @@
     "device_id": "beagleyai",
     "model_name": "0-ViTPose-efficientvit_b1-mpii-256x256-light_onnx2tf.tflite",
     "iterations": 100,
-    "avg_latency_ms": 242.44707822799683,
-    "avg_latency_ms_from_client": 241.3,
-    "avg_energy_mWh": 39.0
+    "runs": 5,
+    "avg_latency_ms": 233.82224655151367,
+    "avg_latency_ms_from_client": 233.78199999999998,
+    "avg_energy_mWh": 51.6,
+    "latency_ms_per_run": [
+        233.95845651626587,
+        233.74582290649414,
+        233.7891674041748,
+        233.98111581802368,
+        233.63667011260986
+    ],
+    "latency_ms_from_client_per_run": [
+        233.92,
+        233.7,
+        233.75,
+        233.94,
+        233.6
+    ],
+    "energy_mWh_per_run": [
+        50.0,
+        52.0,
+        52.0,
+        54.0,
+        50.0
+    ]
 }

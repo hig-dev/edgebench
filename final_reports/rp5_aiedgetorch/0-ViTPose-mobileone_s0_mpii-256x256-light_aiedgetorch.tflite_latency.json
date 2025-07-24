@@ -2,7 +2,29 @@
     "device_id": "rp5_aiedgetorch",
     "model_name": "0-ViTPose-mobileone_s0_mpii-256x256-light_aiedgetorch.tflite",
     "iterations": 100,
-    "avg_latency_ms": 46.341891288757324,
-    "avg_latency_ms_from_client": 45.86,
-    "avg_energy_mWh": 0.0
+    "runs": 5,
+    "avg_latency_ms": 44.042715072631836,
+    "avg_latency_ms_from_client": 43.535999999999994,
+    "avg_energy_mWh": 0.0,
+    "latency_ms_per_run": [
+        44.4709038734436,
+        43.95703077316284,
+        43.82268190383911,
+        43.938491344451904,
+        44.02446746826172
+    ],
+    "latency_ms_from_client_per_run": [
+        44.02,
+        43.41,
+        43.29,
+        43.42,
+        43.54
+    ],
+    "energy_mWh_per_run": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ]
 }

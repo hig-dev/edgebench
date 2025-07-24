@@ -2,7 +2,29 @@
     "device_id": "rp5_tvm",
     "model_name": "0-ViTPose-efficientvit_b2-mpii-256x256-light_v17.onnx",
     "iterations": 100,
-    "avg_latency_ms": 174.22091007232666,
-    "avg_latency_ms_from_client": 174.2,
-    "avg_energy_mWh": 32.0
+    "runs": 5,
+    "avg_latency_ms": 165.72497844696045,
+    "avg_latency_ms_from_client": 165.702,
+    "avg_energy_mWh": 30.8,
+    "latency_ms_per_run": [
+        166.89812183380127,
+        165.7785725593567,
+        165.0589632987976,
+        164.54527139663696,
+        166.34396314620972
+    ],
+    "latency_ms_from_client_per_run": [
+        166.87,
+        165.76,
+        165.04,
+        164.52,
+        166.32
+    ],
+    "energy_mWh_per_run": [
+        30.0,
+        31.0,
+        32.0,
+        30.0,
+        31.0
+    ]
 }

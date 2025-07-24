@@ -2,7 +2,29 @@
     "device_id": "rp5_ort",
     "model_name": "0-ViTPose-efficientvit_b1-mpii-256x256-light.onnx",
     "iterations": 100,
-    "avg_latency_ms": 115.46408414840698,
-    "avg_latency_ms_from_client": 115.44,
-    "avg_energy_mWh": 22.0
+    "runs": 5,
+    "avg_latency_ms": 112.35657405853271,
+    "avg_latency_ms_from_client": 112.332,
+    "avg_energy_mWh": 19.2,
+    "latency_ms_per_run": [
+        111.43192291259766,
+        112.15774774551392,
+        112.54892349243164,
+        112.90486574172974,
+        112.73941040039062
+    ],
+    "latency_ms_from_client_per_run": [
+        111.41,
+        112.13,
+        112.53,
+        112.88,
+        112.71
+    ],
+    "energy_mWh_per_run": [
+        20.0,
+        19.0,
+        18.0,
+        19.0,
+        20.0
+    ]
 }

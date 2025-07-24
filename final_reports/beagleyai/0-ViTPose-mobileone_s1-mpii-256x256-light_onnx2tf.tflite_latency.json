@@ -2,7 +2,29 @@
     "device_id": "beagleyai",
     "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_onnx2tf.tflite",
     "iterations": 100,
-    "avg_latency_ms": 286.8528461456299,
-    "avg_latency_ms_from_client": 286.24,
-    "avg_energy_mWh": 47.0
+    "runs": 5,
+    "avg_latency_ms": 280.72183084487915,
+    "avg_latency_ms_from_client": 280.678,
+    "avg_energy_mWh": 61.2,
+    "latency_ms_per_run": [
+        280.73846340179443,
+        280.6702923774719,
+        280.5925154685974,
+        280.8062410354614,
+        280.80164194107056
+    ],
+    "latency_ms_from_client_per_run": [
+        280.69,
+        280.63,
+        280.55,
+        280.76,
+        280.76
+    ],
+    "energy_mWh_per_run": [
+        62.0,
+        62.0,
+        60.0,
+        60.0,
+        62.0
+    ]
 }

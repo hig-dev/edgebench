@@ -2,7 +2,29 @@
     "device_id": "rp5_aiedgetorch",
     "model_name": "0-ViTPose-DeitTiny-mpii-256x256-light_aiedgetorch.tflite",
     "iterations": 100,
-    "avg_latency_ms": 84.41760063171387,
-    "avg_latency_ms_from_client": 83.95,
-    "avg_energy_mWh": 0.0
+    "runs": 5,
+    "avg_latency_ms": 78.13751173019409,
+    "avg_latency_ms_from_client": 77.65599999999999,
+    "avg_energy_mWh": 0.0,
+    "latency_ms_per_run": [
+        78.97691011428833,
+        78.51951837539673,
+        78.15934419631958,
+        77.0829439163208,
+        77.94884204864502
+    ],
+    "latency_ms_from_client_per_run": [
+        78.51,
+        77.98,
+        77.7,
+        76.59,
+        77.5
+    ],
+    "energy_mWh_per_run": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ]
 }

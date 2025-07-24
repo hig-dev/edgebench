@@ -2,7 +2,29 @@
     "device_id": "rp5_executorch",
     "model_name": "0-ViTPose-DeitTiny-mpii-256x256-light.pte",
     "iterations": 100,
-    "avg_latency_ms": 155.91251850128174,
-    "avg_latency_ms_from_client": 155.89,
-    "avg_energy_mWh": 28.0
+    "runs": 5,
+    "avg_latency_ms": 146.25872421264648,
+    "avg_latency_ms_from_client": 146.232,
+    "avg_energy_mWh": 24.6,
+    "latency_ms_per_run": [
+        146.3701605796814,
+        144.18840646743774,
+        148.6559009552002,
+        146.56177759170532,
+        145.51737546920776
+    ],
+    "latency_ms_from_client_per_run": [
+        146.35,
+        144.16,
+        148.62,
+        146.54,
+        145.49
+    ],
+    "energy_mWh_per_run": [
+        24.0,
+        23.0,
+        25.0,
+        25.0,
+        26.0
+    ]
 }

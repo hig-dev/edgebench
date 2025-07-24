@@ -2,7 +2,29 @@
     "device_id": "rp5_ort",
     "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light.onnx",
     "iterations": 100,
-    "avg_latency_ms": 210.1112985610962,
-    "avg_latency_ms_from_client": 210.08,
-    "avg_energy_mWh": 43.0
+    "runs": 5,
+    "avg_latency_ms": 204.99443340301514,
+    "avg_latency_ms_from_client": 204.968,
+    "avg_energy_mWh": 40.6,
+    "latency_ms_per_run": [
+        207.09234237670898,
+        205.56780576705933,
+        203.73051404953003,
+        204.82460498809814,
+        203.7568998336792
+    ],
+    "latency_ms_from_client_per_run": [
+        207.07,
+        205.54,
+        203.7,
+        204.8,
+        203.73
+    ],
+    "energy_mWh_per_run": [
+        41.0,
+        42.0,
+        39.0,
+        40.0,
+        41.0
+    ]
 }

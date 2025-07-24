@@ -2,7 +2,29 @@
     "device_id": "hailo",
     "model_name": "0-ViTPose-DeitTiny-mpii-256x256-light_v17.hef",
     "iterations": 1000,
-    "avg_latency_ms": 21.983377933502197,
-    "avg_latency_ms_from_client": 21.957,
-    "avg_energy_mWh": 24.0
+    "runs": 5,
+    "avg_latency_ms": 21.56203899383545,
+    "avg_latency_ms_from_client": 21.5594,
+    "avg_energy_mWh": 23.8,
+    "latency_ms_per_run": [
+        21.601877212524414,
+        21.645330905914307,
+        21.509169578552246,
+        21.527052640914917,
+        21.526764631271362
+    ],
+    "latency_ms_from_client_per_run": [
+        21.599,
+        21.643,
+        21.506,
+        21.525,
+        21.524
+    ],
+    "energy_mWh_per_run": [
+        24.0,
+        23.0,
+        25.0,
+        24.0,
+        23.0
+    ]
 }

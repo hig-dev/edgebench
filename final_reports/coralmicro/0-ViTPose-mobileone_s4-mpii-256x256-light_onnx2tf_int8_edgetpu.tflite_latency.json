@@ -2,7 +2,29 @@
     "device_id": "coralmicro",
     "model_name": "0-ViTPose-mobileone_s4-mpii-256x256-light_onnx2tf_int8_edgetpu.tflite",
     "iterations": 1000,
-    "avg_latency_ms": 319.88898277282715,
-    "avg_latency_ms_from_client": 319.739,
-    "avg_energy_mWh": 112.0
+    "runs": 5,
+    "avg_latency_ms": 323.49090733528135,
+    "avg_latency_ms_from_client": 323.2462,
+    "avg_energy_mWh": 108.0,
+    "latency_ms_per_run": [
+        323.71708369255066,
+        323.432199716568,
+        323.4350416660309,
+        323.4360110759735,
+        323.4342005252838
+    ],
+    "latency_ms_from_client_per_run": [
+        323.445,
+        323.184,
+        323.201,
+        323.206,
+        323.195
+    ],
+    "energy_mWh_per_run": [
+        110.0,
+        107.0,
+        108.0,
+        108.0,
+        107.0
+    ]
 }

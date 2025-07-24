@@ -2,7 +2,29 @@
     "device_id": "hailo",
     "model_name": "0-ViTPose-mobileone_s1-mpii-256x256-light_v17.hef",
     "iterations": 1000,
-    "avg_latency_ms": 12.230170726776123,
-    "avg_latency_ms_from_client": 12.14,
-    "avg_energy_mWh": 14.0
+    "runs": 5,
+    "avg_latency_ms": 11.995416975021362,
+    "avg_latency_ms_from_client": 11.9932,
+    "avg_energy_mWh": 13.2,
+    "latency_ms_per_run": [
+        12.020192861557007,
+        11.994086980819702,
+        11.988813877105713,
+        11.984801054000854,
+        11.989190101623535
+    ],
+    "latency_ms_from_client_per_run": [
+        12.018,
+        11.992,
+        11.986,
+        11.983,
+        11.987
+    ],
+    "energy_mWh_per_run": [
+        13.0,
+        14.0,
+        12.0,
+        13.0,
+        14.0
+    ]
 }
