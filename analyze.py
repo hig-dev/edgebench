@@ -1,3 +1,4 @@
+from decimal import ROUND_HALF_UP, Decimal
 from io import StringIO
 import os
 import os.path as osp
@@ -59,6 +60,13 @@ model_display_names = {
     "DeitSmall": "P-DeiT-Small-L",
 }
 
+inference_lib_devices = {
+    "rp5": "TensorFlow Lite",
+    "rp5_ort": "ONNX Runtime",
+    "rp5_executorch": "ExecuTorch",
+    "rp5_tvm": "Apache TVM",
+}
+
 REPORTS_DIR = osp.join(
     osp.dirname(osp.abspath(__file__)),
     "final_reports",
@@ -101,6 +109,32 @@ def get_accuracy_report(device_name: str, model_name: str):
             return json.load(f)
     return None
 
+def get_latency_mean_std(latency_report: Dict[str, float]) -> Tuple[float, float]:
+    latencies = latency_report.get("latency_ms_from_client_per_run", [])
+    if not latencies:
+        raise ValueError("No latencies found in the report")
+    mean_latency = np.mean(latencies)
+    std_latency = np.std(latencies)
+    if mean_latency < 0 or std_latency < 0:
+        raise ValueError(f"Invalid latencies in the report: {latencies}")
+    return mean_latency, std_latency
+
+def get_energy_mean_std(latency_report: Dict[str, float]) -> Tuple[float, float]:
+    iterations = latency_report.get("iterations", -1)
+    if iterations <= 0:
+        raise ValueError(f"Invalid iterations count {iterations}")
+    energies = latency_report.get("energy_mWh_per_run", [])
+    if not energies:
+        raise ValueError("No energies found in the report")
+    energy_efficiencies_mWh = [
+        (energy / iterations) for energy in energies
+    ]
+    energy_efficiencies_uWh = [energy * 1000 for energy in energy_efficiencies_mWh]
+    mean_energy_efficiency = np.mean(energy_efficiencies_uWh)
+    std_energy_efficiency = np.std(energy_efficiencies_uWh)
+    if mean_energy_efficiency < 0 or std_energy_efficiency < 0:
+        raise ValueError(f"Invalid energies in the report: {energies}")
+    return mean_energy_efficiency, std_energy_efficiency
 
 def compare_metric(
     metric_key: str,
@@ -184,10 +218,24 @@ def compare_metric(
         table.add_divider()
     print(table)
 
+def round_and_format(value, n):
+    d = Decimal(str(value)).quantize(Decimal(f"1.{'0'*n}"), rounding=ROUND_HALF_UP)
+    return f"{d:.{n}f}"
 
 def format_latency(latency: float) -> str:
     return f"{round(latency):.0f}" if latency >= 0 else "DNF"
 
+def format_latency_with_std(latency: float, std: float, digits=2, include_unit = False, omit_low_std = False) -> str:
+    unit = " ms" if include_unit else ""
+    if omit_low_std and std < 0.5:
+        return f"{round_and_format(latency, digits)}{unit}" if latency >= 0 else "DNF"
+    return f"{round_and_format(latency, digits)} \\textpm\\ {round_and_format(std, digits)}{unit}" if latency >= 0 else "DNF"
+
+def format_energy_efficiency_with_std(energy_efficiency: float, std: float, digits=2, include_unit = False, omit_low_std = False) -> str:
+    unit = " {\\textmu}Wh" if include_unit else ""
+    if omit_low_std and std < 0.5:
+        return f"{round_and_format(energy_efficiency, digits)}{unit}" if energy_efficiency >= 0 else "DNF"
+    return f"{round_and_format(energy_efficiency, digits)} \\textpm\\ {round_and_format(std, digits)}{unit}" if energy_efficiency >= 0 else "DNF"
 
 def format_accuracy(accuracy: float) -> str:
     return f"{accuracy:.2f}" if accuracy >= 0 else "DNF"
@@ -356,8 +404,8 @@ for model_name in models:
     if not onnx2tf_report or not aiedgetorch_report:
         print(f"Report for {model_name} not found in rp5 or rp5_aiedgetorch")
         continue
-    onnx2tf_latency = onnx2tf_report.get("avg_latency_ms_from_client", -1)
-    aiedgetorch_latency = aiedgetorch_report.get("avg_latency_ms_from_client", -1)
+    onnx2tf_latency, onnx2tf_latency_std = get_latency_mean_std(onnx2tf_report)
+    aiedgetorch_latency, aiedgetorch_latency_std = get_latency_mean_std(aiedgetorch_report)
     if onnx2tf_latency < 0 or aiedgetorch_latency < 0:
         print(f"Invalid latency for {model_name} in rp5 or rp5_aiedgetorch")
         continue
@@ -368,9 +416,9 @@ for model_name in models:
     table.add_row(
         [
             model_display_names.get(model_name, model_name),
-            format_latency(aiedgetorch_latency),
-            format_latency(onnx2tf_latency),
-            f"{latency_diff_percentage:.2f}%",
+            format_latency_with_std(aiedgetorch_latency, aiedgetorch_latency_std, include_unit= True),
+            format_latency_with_std(onnx2tf_latency, onnx2tf_latency_std, include_unit= True),
+            f"{latency_diff_percentage:.2f}\\%",
         ]
     )
 print(table)
@@ -434,15 +482,16 @@ for metric_key, metric_name in [
                 value = -1
 
             if metric_key == "avg_latency_ms_from_client":
-                row.append(format_latency(value))
+                mean_latency, std_latency = get_latency_mean_std(report) if report else (-1, -1)
+                row.append(
+                    format_latency_with_std(mean_latency, std_latency, digits=0, omit_low_std=True)
+                )
             elif metric_key == "avg_energy_mWh":
                 if value <= 0:
                     row.append("DNF")
                 else:
-                    iterations = report.get("iterations", -1)
-                    if iterations <= 0:
-                        raise ValueError(f"Invalid iterations count {iterations}")
-                    row.append(f"{(value / iterations)*1000:.0f}")
+                    mean_energy, std_energy = get_energy_mean_std(report) if report else (-1, -1)
+                    row.append(format_energy_efficiency_with_std(mean_energy, std_energy, digits=0, omit_low_std=True))
             elif metric_key in ["PCK", "PCK-AUC"]:
                 # Find the torch model summary for the current model by model name
                 # The key should contain the model name
@@ -476,6 +525,34 @@ for metric_key, metric_name in [
         table.add_row(row)
     print(table)
     print(table.get_latex_string())
+
+print("\nResults for RTX5090:")
+table = PrettyTable()
+table.align = "l"
+table.field_names = ["Model", "Latency (ms)", "Energy Efficiency (uWh)"]
+rtx5090_models = models + ["efficientvit_l2"]  # Add efficientvit_l2 for RTX5090
+for model_name in rtx5090_models:
+    report = get_latency_report("rtx5090", model_name)
+    if not report:
+        print(f"Report for {model_name} not found in rtx5090")
+        continue
+
+    latency_mean, latency_std = get_latency_mean_std(report)
+    energy_mean, energy_std = get_energy_mean_std(report)
+    if latency_mean <= 0 or energy_mean <= 0:
+        raise ValueError(
+            f"Invalid latency {latency_mean} ms or energy {energy_mean} mWh in report"
+        )
+    table.add_row(
+        [
+            model_display_names.get(model_name, model_name),
+            format_latency_with_std(latency_mean, latency_std, include_unit=True),
+            format_energy_efficiency_with_std(energy_mean, energy_std, include_unit=True),
+        ]
+    )
+
+print(table)
+print(table.get_latex_string())
 
 print("\nPower adjustment grove_vision_ai_v2 (with carrier board):")
 for model_name in models:
@@ -885,3 +962,69 @@ create_plot(
     y_label="Energy Efficiency (μWh)",
     stacked=False,
 )
+
+
+print("\nInference library latency comparison for Raspberry Pi 5:")
+table = PrettyTable()
+table.align = "l"
+table.field_names = ["Inference Library"] + models
+tf_latencies = []
+tvm_latencies = []
+
+for device_name in inference_lib_devices.keys():
+    row = [inference_lib_devices[device_name]]
+    for model_name in models:
+        report = get_latency_report(device_name, model_name)
+        if not report:
+            raise ValueError(
+                f"Report for {model_name} not found in {device_name}"
+            )
+        mean_latency, std_latency = get_latency_mean_std(report)
+        if device_name == "rp5":
+            tf_latencies.append(mean_latency)
+        elif device_name == "rp5_tvm":
+            tvm_latencies.append(mean_latency)
+        if mean_latency < 0 or std_latency < 0:
+            raise ValueError(
+                f"Invalid latency {mean_latency} ms or std {std_latency} ms in report for {model_name} in {device_name}"
+            )
+        row.append(
+            format_latency_with_std(mean_latency, std_latency, digits=0, include_unit=False, omit_low_std=True)
+        )
+    table.add_row(row)
+print(table)
+print(table.get_latex_string())
+
+tf_tvm_latency_diff_factors = [
+    tvm / tf
+    for tf, tvm in zip(tf_latencies, tvm_latencies)
+]
+print("\nTVM to TensorFlow latency difference factors:")
+for model_name, diff_factor in zip(models, tf_tvm_latency_diff_factors):
+    print(f"{model_name}: {diff_factor:.2f}x")
+tf_tvm_latency_diff_factors_mean = np.mean(tf_tvm_latency_diff_factors)
+print(f"\nAverage TVM to TensorFlow latency difference factor: {tf_tvm_latency_diff_factors_mean:.2f}x")
+
+print("\nInference library energy comparison for Raspberry Pi 5:")
+table_energy = PrettyTable()
+table_energy.align = "l"
+table_energy.field_names = ["Inference Library"] + models
+for device_name in inference_lib_devices.keys():
+    row = [inference_lib_devices[device_name]]
+    for model_name in models:
+        report = get_latency_report(device_name, model_name)
+        if not report:
+            raise ValueError(
+                f"Report for {model_name} not found in {device_name}"
+            )
+        mean_energy, std_energy = get_energy_mean_std(report)
+        if mean_energy < 0 or std_energy < 0:
+            raise ValueError(
+                f"Invalid energy {mean_energy} mWh or std {std_energy} mWh in report for {model_name} in {device_name}"
+            )
+        row.append(
+            format_energy_efficiency_with_std(mean_energy, std_energy, digits=0, include_unit=False, omit_low_std=True)
+        )
+    table_energy.add_row(row)
+print(table_energy)
+print(table_energy.get_latex_string())
